@@ -321,7 +321,9 @@ Contributions are welcome! Feel free to:
 - [ ] Performance improvements
   - Implement async/await for parallel processing
   - Add batch processing capabilities
-  - Optimize token usage
+  - Optimize the code
+  - Add a recursive summary
+  - Add image and figure support
 
 - [ ] Additional Model Providers
   - Add Anthropic Claude support

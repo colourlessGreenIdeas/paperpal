@@ -174,28 +174,6 @@ class Paperpal:
             logger.error(f"Error getting completion: {str(e)}")
             raise
     
-    def get_initial_summary(self, text: str) -> str:
-        """Generate an initial comprehensive summary of the entire paper."""
-        try:
-            grade_desc = self.get_grade_level_description()
-            prompt = f"""Given the following academic paper, create a comprehensive summary that would be suitable for {grade_desc}. The summary should:
-            1. Capture the main points, methodology, results, and conclusions
-            2. Maintain accuracy while adjusting complexity for the target level
-            3. Preserve key numerical data and findings, explaining them at an appropriate level
-            4. Provide context suitable for {grade_desc}
-            5. If equations are present, explain them in a way that {grade_desc} would understand
-            6. Use vocabulary and concepts appropriate for {grade_desc}
-            
-            Paper text:
-            {text}
-            
-            Comprehensive Summary:"""
-            
-            return self.get_completion(prompt)
-        except Exception as e:
-            logger.error(f"Error generating initial summary: {str(e)}")
-            raise
-    
     def simplify_chunk(self, chunk: str, context: str) -> str:
         """Simplify a specific chunk of text while maintaining academic integrity."""
         try:
@@ -211,11 +189,14 @@ class Paperpal:
                - For undergraduate and above: Include full equations with appropriate explanations
             6. For tables, simplify them to a level appropriate for {grade_desc}
             7. Include examples or analogies suitable for {grade_desc} when helpful
+            8. Do not repeat explanations that were already covered in previous sections
+            9. If a concept was already explained in a previous section, you can refer to it briefly
+            10. Focus on new information and concepts not covered in previous sections
 
-            Overall Paper Context:
+            Overall Paper Context and Previously Simplified Content:
             {context}
             
-            Chunk to Simplify:
+            Current Chunk to Simplify:
             {chunk}
             
             Simplified version:"""
@@ -307,7 +288,6 @@ class Paperpal:
                 # Write main content
                 f.write("## Main Content\n\n")
                 for i, chunk in enumerate(simplified_chunks[1:], 1):
-                    f.write(f"### Section {i}\n\n")
                     
                     # Convert equation delimiters in the chunk
                     processed_chunk = (chunk.replace("\\(", "$")
@@ -357,7 +337,7 @@ class Paperpal:
             logger.error(f"Error saving content to markdown file: {str(e)}")
             raise
 
-    def process_paper(self, input_pdf_path: str, output_json_path: str = None, output_text_path: str = None, output_pdf_path: str = None):
+    def process_paper(self, input_pdf_path: str, output_text_path: str = None):
         """Main method to process and simplify an academic paper."""
         try:
             logger.info("Starting paper processing...")
@@ -366,38 +346,14 @@ class Paperpal:
             logger.info("Extracting text from PDF...")
             text = self.extract_text_from_pdf(input_pdf_path)
             
-            # Generate initial summary
-            logger.info("Generating initial summary...")
-            summary = self.get_initial_summary(text)
-            
-            # Initialize output files if requested
+            # Initialize output file if requested
             if output_text_path:
                 with open(output_text_path, 'w', encoding='utf-8') as f:
                     # Write initial markdown content
                     f.write("# Simplified Academic Paper\n\n")
                     f.write("> **Note**: This document contains mathematical equations in LaTeX format. ")
                     f.write("For best viewing in VS Code, install the 'Markdown Preview Enhanced' extension.\n\n")
-                    f.write("## Summary\n\n")
-                    # Process summary and write it
-                    processed_summary = (summary.replace("\\(", "$")
-                                            .replace("\\)", "$")
-                                            .replace("\\[", "$$")
-                                            .replace("\\]", "$$"))
-                    f.write(f"{processed_summary}\n\n")
-                    f.write("## Main Content\n\n")
-            
-            if output_json_path:
-                # Initialize JSON structure
-                json_content = {
-                    "summary": summary,
-                    "chunks": [],
-                    "metadata": {
-                        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                }
-                # Write initial JSON
-                with open(output_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(json_content, f, ensure_ascii=False, indent=2)
+                    f.write("## Content\n\n")
             
             # Split text into chunks
             logger.info("Splitting text into chunks...")
@@ -406,16 +362,25 @@ class Paperpal:
             
             # Process each chunk
             logger.info("Processing chunks...")
-            simplified_chunks = [summary]  # Keep track of all chunks for PDF
+            simplified_chunks = []  # Keep track of previously simplified chunks
+            
             for i, chunk in enumerate(chunks, 1):
                 logger.info(f"Processing chunk {i}/{len(chunks)}...")
-                simplified_chunk = self.simplify_chunk(chunk, summary)
+                
+                # Create context from original text start and recent simplified chunks
+                context = text[:1000]  # First 1000 chars of original for high-level context
+                if simplified_chunks:
+                    # Add the last 2 simplified chunks as recent context
+                    recent_context = "\n\n".join(simplified_chunks[-2:])
+                    context = f"{context}\n\nRecently simplified content:\n{recent_context}"
+                
+                simplified_chunk = self.simplify_chunk(chunk, context)
                 simplified_chunks.append(simplified_chunk)
                 
                 # Update markdown file in real-time if requested
                 if output_text_path:
                     with open(output_text_path, 'a', encoding='utf-8') as f:
-                        f.write(f"### Section {i}\n\n")
+
                         # Process chunk for markdown
                         processed_chunk = simplified_chunk
                         processed_chunk = (processed_chunk.replace("\\(", "$")
@@ -453,16 +418,6 @@ class Paperpal:
                         processed_chunk = '\n'.join(formatted_lines)
                         f.write(f"{processed_chunk}\n\n")
                 
-                # Update JSON file in real-time if requested
-                if output_json_path:
-                    with open(output_json_path, 'r+', encoding='utf-8') as f:
-                        data = json.load(f)
-                        data["chunks"].append(simplified_chunk)
-                        data["metadata"]["total_chunks"] = len(data["chunks"])
-                        f.seek(0)
-                        json.dump(data, f, ensure_ascii=False, indent=2)
-                        f.truncate()
-                
                 # Respect rate limits
                 time.sleep(float(os.getenv("MIN_TIME_BETWEEN_CALLS", "0.2")))
             
@@ -472,12 +427,6 @@ class Paperpal:
                     f.write("\n---\n\n")
                     f.write("*Note: This document uses KaTeX/MathJax compatible math notation. ")
                     f.write("For best viewing in VS Code, install the 'Markdown Preview Enhanced' extension.*\n")
-            
-            # Create PDF if requested (this still happens at the end due to PDF format requirements)
-            if output_pdf_path:
-                logger.info("Creating simplified PDF...")
-                self.create_simplified_pdf(simplified_chunks, output_pdf_path)
-                logger.info(f"Successfully saved simplified paper to {output_pdf_path}")
             
             logger.info("Processing completed successfully!")
             
@@ -508,22 +457,20 @@ def main():
             provider=args.provider
         )
         
-        # Get input file path and create output paths
+        # Get input file path and create output path
         input_pdf = args.input
         base_name = os.path.splitext(input_pdf)[0]
         
-        # Generate output filenames
-        output_json = f"{base_name}_simplified_{args.grade_level}.json"
+        # Generate output filename
         output_text = f"{base_name}_simplified_{args.grade_level}.md"
         
         logger.info(f"Processing {input_pdf}")
         logger.info(f"Target grade level: {args.grade_level}")
         logger.info(f"Using AI provider: {args.provider}")
-        logger.info(f"Output files will be:")
+        logger.info(f"Output file will be:")
         logger.info(f"  - Markdown: {output_text}")
-        logger.info(f"  - JSON: {output_json}")
         
-        # Process paper and save to both JSON and text
+        # Process paper and save to markdown
         simplifier.process_paper(
             input_pdf, 
             output_text_path=output_text
