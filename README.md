@@ -36,11 +36,11 @@ sudo apt-get install -y wkhtmltopdf
 ```
 
 #### Windows
-1. Install Python 3.10 or higher from https://www.python.org/downloads/
+1. Install Python 3.10 (which is what the setup instruction below is for) or higher from https://www.python.org/downloads/
 2. Download and install wkhtmltopdf from https://wkhtmltopdf.org/downloads.html
    - Add wkhtmltopdf to your system's PATH (usually `C:\Program Files\wkhtmltopdf\bin`)
 3. Install poppler for Windows:
-   - Download from http://blog.alivate.com.au/poppler-windows/
+   - Download from https://github.com/oschwartz10612/poppler-windows (the popular http://blog.alivate.com.au/poppler-windows/ no longer works)
    - Extract to a permanent location
    - Add poppler's bin directory to your system's PATH
 
@@ -129,8 +129,9 @@ cd <repository-directory>
 2. Set up Python environment (choose one method):
 ```bash
 # Method 1: venv
-python3.10 -m venv venv
+python3.10 -m venv venv   # Linux/macOS
 source venv/bin/activate  # Linux/macOS
+python -m venv venv       # Windows
 .\venv\Scripts\activate   # Windows
 
 # Method 2: conda
@@ -148,6 +149,7 @@ pip install -r requirements.txt
 Create a `.env` file. Copy the `.example.env` files contents to `.env` and edit it based on your requirements:
 
 ## Usage
+To avoid code repetition, Windows code version is used below. If you are on Mac or Linux, use `python3` instead of `python`
 
 ### Basic Usage
 ```bash
@@ -184,11 +186,11 @@ The script generates files with the grade level in the filename:
 
 ### To convert the output markdown (.md) files to pdf, run the `md_to_pdf.py` script:
 
-`python3 md_to_pdf.py bitcoin_simplified_grade12.md`
+`python md_to_pdf.py bitcoin_simplified_grade12.md`
 
 optionally, provide an outputname if you wish:
 
-`python3 md_to_pdf.py bitcoin_simplified_grade12.md -o bitcoin_for_dummies.pdf`
+`python md_to_pdf.py bitcoin_simplified_grade12.md -o bitcoin_for_dummies.pdf`
 
 ## Troubleshooting
 
