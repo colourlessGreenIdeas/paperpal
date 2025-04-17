@@ -5,7 +5,7 @@
 *.pdf
 *.json
 *.md
-*.html
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

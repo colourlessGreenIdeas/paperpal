@@ -9,6 +9,7 @@ import logging
 import json
 from typing import List, Optional
 import argparse
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -77,6 +78,7 @@ class Paperpal:
             
             # Define grade level descriptions
             self.grade_level_descriptions = {
+                "original": "return the original text without any simplification",
                 "grade1": "a 6-7 year old first grader, using very simple words and concepts",
                 "grade2": "a 7-8 year old second grader, using simple words and basic concepts",
                 "grade3": "an 8-9 year old third grader, introducing slightly more complex concepts",
@@ -145,7 +147,7 @@ class Paperpal:
         """Get completion from OpenAI or Azure OpenAI."""
         try:
             messages = [
-                {"role": "system", "content": """You are an expert academic researcher who excels at making complex content accessible while maintaining accuracy.
+                {"role": "system", "content": """You are an expert academic researcher who excels at ensuring accuracy of complex content.
                 When handling mathematical equations:
                 1. Use $ for inline equations (e.g., $x = y$)
                 2. Use $$ for display equations (e.g., $$\\sum_{i=1}^n x_i$$)
@@ -178,28 +180,49 @@ class Paperpal:
         """Simplify a specific chunk of text while maintaining academic integrity."""
         try:
             grade_desc = self.get_grade_level_description()
-            prompt = f"""Using the provided context and specific chunk, create a simplified version that would be suitable for {grade_desc}. The simplified version should:
-            1. Use language and explanations appropriate for {grade_desc}
-            2. Explain complex concepts in terms that {grade_desc} would understand
-            3. Preserve important information while adjusting the complexity level
-            4. Maintain consistency with the overall paper context
-            5. If equations are present:
-               - For grade 1-8: Focus on conceptual understanding with minimal equations
-               - For grade 9-12: Include simplified equations with clear explanations
-               - For undergraduate and above: Include full equations with appropriate explanations
-            6. For tables, simplify them to a level appropriate for {grade_desc}
-            7. Include examples or analogies suitable for {grade_desc} when helpful
-            8. Do not repeat explanations that were already covered in previous sections
-            9. If a concept was already explained in a previous section, you can refer to it briefly
-            10. Focus on new information and concepts not covered in previous sections
+            
+            if grade_desc == "original":
+                prompt = f"""For the given context, return the original text without any simplification. Follow the original text exactly. Here are additional instructions:
+                - Do not change the text
+                - Do not add any additional text
+                - Do not remove any text
+                - Do not change the order of the text
+                - Do not change the structure of the text
+                - Do not change the formatting of the text
+                - Do not change the mathematical content of the text
+                - Do not change the scientific content of the text
+                - Do not change the technical content of the text
+                - Do not change the academic content of the text
+                - Do not change the professional content of the text
+                - Do not change the technical content of the text
+                Current Chunk to Simplify:
+                {chunk}
+                
+                Processed version:
+                """
+            else:
+                prompt = f"""Using the provided context and specific chunk, create a simplified version that would be suitable for {grade_desc}. The simplified version should:
+                1. Use language and explanations appropriate for {grade_desc}
+                2. Explain complex concepts in terms that {grade_desc} would understand
+                3. Preserve important information while adjusting the complexity level
+                4. Maintain consistency with the overall paper context
+                5. If equations are present:
+                - For grade 1-8: Focus on conceptual understanding with minimal equations
+                - For grade 9-12: Include simplified equations with clear explanations
+                - For undergraduate and above: Include full equations with appropriate explanations
+                6. For tables, simplify them to a level appropriate for {grade_desc}
+                7. Include examples or analogies suitable for {grade_desc} when helpful
+                8. Do not repeat explanations that were already covered in previous sections
+                9. If a concept was already explained in a previous section, you can refer to it briefly
+                10. Focus on new information and concepts not covered in previous sections
 
-            Overall Paper Context and Previously Simplified Content:
-            {context}
-            
-            Current Chunk to Simplify:
-            {chunk}
-            
-            Simplified version:"""
+                Overall Paper Context and Previously Simplified Content:
+                {context}
+                
+                Current Chunk to Simplify:
+                {chunk}
+                
+                Simplified version:"""
             
             return self.get_completion(prompt)
         except Exception as e:
@@ -346,8 +369,11 @@ class Paperpal:
             logger.info("Extracting text from PDF...")
             text = self.extract_text_from_pdf(input_pdf_path)
             
-            # Initialize output file if requested
+            # Initialize output paths
             if output_text_path:
+                # Create JSON path from markdown path
+                output_json_path = str(Path(output_text_path).with_suffix('.json'))
+                
                 with open(output_text_path, 'w', encoding='utf-8') as f:
                     # Write initial markdown content
                     f.write("# Simplified Academic Paper\n\n")
@@ -363,9 +389,13 @@ class Paperpal:
             # Process each chunk
             logger.info("Processing chunks...")
             simplified_chunks = []  # Keep track of previously simplified chunks
-            
+            original_chunks = []    # Keep track of original chunks
+            processed_chunks = []  # Keep track of processed chunks
             for i, chunk in enumerate(chunks, 1):
                 logger.info(f"Processing chunk {i}/{len(chunks)}...")
+                
+                # Store original chunk
+                original_chunks.append(chunk)
                 
                 # Create context from original text start and recent simplified chunks
                 context = text[:1000]  # First 1000 chars of original for high-level context
@@ -380,7 +410,6 @@ class Paperpal:
                 # Update markdown file in real-time if requested
                 if output_text_path:
                     with open(output_text_path, 'a', encoding='utf-8') as f:
-
                         # Process chunk for markdown
                         processed_chunk = simplified_chunk
                         processed_chunk = (processed_chunk.replace("\\(", "$")
@@ -416,10 +445,36 @@ class Paperpal:
                             formatted_lines.append("$$\n")
                         
                         processed_chunk = '\n'.join(formatted_lines)
+                        processed_chunks.append(processed_chunk)
                         f.write(f"{processed_chunk}\n\n")
                 
                 # Respect rate limits
                 time.sleep(float(os.getenv("MIN_TIME_BETWEEN_CALLS", "0.2")))
+            
+            # Save JSON output if path is provided
+            if output_text_path:
+                # Create JSON structure
+                json_content = {
+                    "metadata": {
+                        "total_chunks": len(chunks),
+                        "grade_level": self.grade_level,
+                        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "source_file": input_pdf_path
+                    },
+                    "chunks": [
+                        {
+                            "index": i,
+                            "original": orig.strip(),
+                            "simplified": proc.strip()
+                        }
+                        for i, (orig, proc) in enumerate(zip(original_chunks, processed_chunks))
+                    ]
+                }
+                
+                # Save JSON
+                with open(output_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(json_content, f, ensure_ascii=False, indent=2)
+                logger.info(f"Saved JSON output to {output_json_path}")
             
             # Add final markdown footer if needed
             if output_text_path:
@@ -439,11 +494,11 @@ def main():
     parser = argparse.ArgumentParser(description='Simplify academic papers while preserving mathematical content')
     parser.add_argument('input', help='Input PDF file path')
     parser.add_argument('-g', '--grade-level', 
-                       choices=['grade1', 'grade2', 'grade3', 'grade4', 'grade5', 'grade6', 'grade7', 'grade8',
+                       choices=['original', 'grade1', 'grade2', 'grade3', 'grade4', 'grade5', 'grade6', 'grade7', 'grade8',
                                'grade9', 'grade10', 'grade11', 'grade12', 'freshman', 'undergraduate', 
                                'bachelors', 'masters', 'phd'],
-                       default='undergraduate',
-                       help='Target grade level for simplification (default: undergraduate)')
+                       default='original',
+                       help='Target grade level for simplification (default: original)')
     parser.add_argument('-p', '--provider',
                        choices=['openai', 'azure'],
                        default='openai',
