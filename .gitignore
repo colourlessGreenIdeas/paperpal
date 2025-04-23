@@ -5,6 +5,7 @@
 *.pdf
 *.json
 *.md
+output/*.html
 
 
 # Byte-compiled / optimized / DLL files
