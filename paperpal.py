@@ -2,6 +2,8 @@ import os
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from openai import OpenAI, AzureOpenAI
+from google import genai
+from google.genai import types
 import tiktoken
 import time
 import logging
@@ -27,7 +29,9 @@ load_dotenv(env_path)  # Load specific file
 
 # Verify loading
 print("API Key exists:", "OPENAI_API_KEY" in os.environ)  # Should print True
+print("Gemini API Key exists:", "GOOGLE_API_KEY" in os.environ)  # Should print True if using Gemini
 print("Model:", os.getenv("OPENAI_MODEL", "NOT FOUND"))  # Should show your model
+print("Gemini Model:", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-001"))  # Default Gemini model
 
 class RateLimiter:
     """Handles rate limiting across multiple threads"""
@@ -55,11 +59,11 @@ class RateLimiter:
 
 class Paperpal:
     def __init__(self, model_temperature: float = 0.3, provider: str = "openai"):
-        """Initialize the Paperpal with OpenAI or Azure OpenAI configuration.
+        """Initialize the Paperpal with OpenAI, Azure OpenAI, or Google Gemini configuration.
         
         Args:
             model_temperature (float): Temperature for the language model
-            provider (str): AI provider to use - 'openai' or 'azure' (default: 'openai')
+            provider (str): AI provider to use - 'openai', 'azure', or 'gemini' (default: 'openai')
         """
         try:
             # Set provider
@@ -82,6 +86,20 @@ class Paperpal:
                 self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview").strip()
                 self.embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small").strip()
                 logger.info(f"OpenAI Model: {self.model}")
+                
+                
+            elif self.provider == "gemini":
+                api_key = os.getenv("GOOGLE_API_KEY", "").strip()
+                if not api_key:
+                    raise ValueError("GOOGLE_API_KEY is required for Gemini provider")
+                
+                # Initialize Gemini client
+                # genai.configure(api_key=api_key)
+                # Only run this block for Gemini Developer API
+                self.client = genai.Client(api_key=api_key)
+                # self.client = genai.Client()
+                self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-001").strip()
+                logger.info(f"Gemini Model: {self.model}")
                 
             else:  # azure
                 api_key = os.getenv("AZURE_OPENAI_API_KEY")
@@ -180,35 +198,52 @@ class Paperpal:
             raise
     
     def get_completion(self, prompt: str) -> str:
-        """Get completion from OpenAI or Azure OpenAI with rate limiting."""
+        """Get completion from OpenAI, Azure OpenAI, or Gemini with rate limiting."""
         self.rate_limiter.wait_if_needed()
         
         try:
-            messages = [
-                {"role": "system", "content": """You are an expert academic researcher who excels at ensuring accuracy of complex content.
-                When handling mathematical equations:
-                1. Use $ for inline equations (e.g., $x = y$)
-                2. Use $$ for display equations (e.g., $$\\sum_{i=1}^n x_i$$)
-                3. Never use \\( or \\) or \\[ or \\] for equations
-                4. Use proper LaTeX notation for mathematical symbols
-                5. Keep variable names and mathematical symbols consistent"""},
-                {"role": "user", "content": prompt}
-            ]
-
-            if self.provider == "openai":
-                response = self.client.chat.completions.create(
+            if self.provider == "gemini":
+                response = self.client.models.generate_content(
                     model=self.model,
-                    messages=messages,
-                    temperature=self.temperature
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=self.temperature,
+                        system_instruction="""You are an expert academic researcher who excels at ensuring accuracy of complex content.
+                    When handling mathematical equations:
+                    1. Use $ for inline equations (e.g., $x = y$)
+                    2. Use $$ for display equations (e.g., $$\\sum_{i=1}^n x_i$$)
+                    3. Never use \\( or \\) or \\[ or \\] for equations
+                    4. Use proper LaTeX notation for mathematical symbols
+                    5. Keep variable names and mathematical symbols consistent"""
+                    )
                 )
-            else:  # azure
-                response = self.client.chat.completions.create(
-                    model=self.deployment_name,
-                    messages=messages,
-                    temperature=self.temperature
-                )
-            
-            return response.choices[0].message.content
+                return response.text
+            else:
+                messages = [
+                    {"role": "system", "content": """You are an expert academic researcher who excels at ensuring accuracy of complex content.
+                    When handling mathematical equations:
+                    1. Use $ for inline equations (e.g., $x = y$)
+                    2. Use $$ for display equations (e.g., $$\\sum_{i=1}^n x_i$$)
+                    3. Never use \\( or \\) or \\[ or \\] for equations
+                    4. Use proper LaTeX notation for mathematical symbols
+                    5. Keep variable names and mathematical symbols consistent"""},
+                    {"role": "user", "content": prompt}
+                ]
+
+                if self.provider == "openai":
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=self.temperature
+                    )
+                else:  # azure
+                    response = self.client.chat.completions.create(
+                        model=self.deployment_name,
+                        messages=messages,
+                        temperature=self.temperature
+                    )
+                
+                return response.choices[0].message.content
             
         except Exception as e:
             logger.error(f"Error getting completion: {str(e)}")
@@ -535,7 +570,7 @@ def main():
                        default=['original', 'grade8', 'undergraduate', 'phd'],
                        help='Target grade levels for simplification (default: original grade8 undergraduate phd)')
     parser.add_argument('-p', '--provider',
-                       choices=['openai', 'azure'],
+                       choices=['openai', 'azure', 'gemini'],
                        default='openai',
                        help='AI provider to use (default: openai)')
     args = parser.parse_args()
