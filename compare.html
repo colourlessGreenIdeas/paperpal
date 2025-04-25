@@ -8,77 +8,134 @@
     <!-- Add KaTeX CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <!-- Add KaTeX JS -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-    <!-- Add auto-render extension for KaTeX -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <!-- Add marked.js for markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         .content-panel {
             height: calc(100vh - 6rem);
         }
-        /* Add some styling for equation blocks */
-        .katex-display {
-            margin: 1em 0;
-            padding: 1em;
-            background: #f8fafc;
-            border-radius: 0.5rem;
-            overflow-x: auto;
+        
+        /* VS Code-like styling */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+            color: #24292e;
         }
+        
+        .prose {
+            color: #24292e;
+            line-height: 1.6;
+        }
+        
+        .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+            color: #24292e;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: 600;
+        }
+        
+        .prose h1 {
+            font-size: 1.5em;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+        }
+        
+        .prose h2 {
+            font-size: 1.25em;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+        }
+        
         /* Table styles */
         table {
             width: 100%;
             border-collapse: collapse;
             margin: 1em 0;
+            border: 1px solid #dfe2e5;
         }
+        
         th, td {
-            border: 1px solid #e2e8f0;
-            padding: 0.75rem;
+            border: 1px solid #dfe2e5;
+            padding: 0.5rem 0.75rem;
             text-align: left;
         }
+        
         th {
-            background-color: #f8fafc;
+            background-color: #f6f8fa;
             font-weight: 600;
         }
+        
         tr:nth-child(even) {
-            background-color: #f8fafc;
+            background-color: #f6f8fa;
         }
+        
         /* List styles */
         ul, ol {
-            padding-left: 1.5em;
+            padding-left: 2em;
             margin: 1em 0;
         }
+        
         ul {
             list-style-type: disc;
         }
+        
         ol {
             list-style-type: decimal;
         }
+        
         /* Code block styles */
         pre {
-            background-color: #f8fafc;
-            padding: 1em;
-            border-radius: 0.5rem;
-            overflow-x: auto;
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            padding: 16px;
+            overflow: auto;
+            line-height: 1.45;
             margin: 1em 0;
         }
+        
         code {
-            font-family: ui-monospace, monospace;
-            font-size: 0.9em;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            background-color: rgba(27, 31, 35, 0.05);
+            border-radius: 3px;
+            font-size: 85%;
             padding: 0.2em 0.4em;
-            background-color: #f1f5f9;
-            border-radius: 0.25rem;
         }
+        
         pre code {
-            padding: 0;
             background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 100%;
         }
+        
         /* Blockquote styles */
         blockquote {
-            border-left: 4px solid #e2e8f0;
-            padding-left: 1em;
+            border-left: 4px solid #dfe2e5;
+            color: #6a737d;
+            padding: 0 1em;
+            margin-left: 0;
+        }
+        
+        /* Math equation styling */
+        .math-display {
+            display: block;
             margin: 1em 0;
-            color: #64748b;
+            padding: 1em;
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            text-align: center;
+        }
+        
+        .math-inline {
+            padding: 0 0.2em;
+            background: rgba(27, 31, 35, 0.05);
+            border-radius: 3px;
+        }
+        
+        /* Error styling */
+        .text-red-500 {
+            color: #f85149;
         }
     </style>
 </head>
@@ -138,12 +195,16 @@
     </div>
 
     <script>
-        // Configure marked options
+        // Configure marked options to match VS Code's behavior
         marked.setOptions({
             breaks: true,
             gfm: true,
             headerIds: false,
-            mangle: false
+            mangle: false,
+            pedantic: false,
+            smartLists: true,
+            smartypants: true,
+            xhtml: true
         });
 
         // Synchronize scrolling between panels
@@ -158,22 +219,101 @@
             leftPanel.scrollTop = rightPanel.scrollTop;
         });
 
-        // Function to render math in an element
-        function renderMath(element) {
-            renderMathInElement(element, {
-                delimiters: [
-                    {left: "$$", right: "$$", display: true},
-                    {left: "$", right: "$", display: false}
-                ],
-                throwOnError: false,
-                output: 'html'
-            });
+        // Function to render math expressions with KaTeX
+        function renderKaTeX(tex, displayMode) {
+            try {
+                // Clean up LaTeX input
+                tex = tex.trim();
+                
+                // Handle HTML entities
+                tex = tex.replace(/&amp;/g, '&')
+                         .replace(/&lt;/g, '<')
+                         .replace(/&gt;/g, '>');
+                
+                // Detect equation environments
+                if (tex.startsWith('\\begin{align') || tex.startsWith('\\begin{equation') || 
+                    tex.startsWith('\\begin{gather}') || tex.startsWith('\\begin{cases}')) {
+                    displayMode = true;
+                }
+                
+                // Special handling for equations with explanations
+                if (displayMode && tex.includes('\\text{where }') && tex.includes('*')) {
+                    const parts = tex.split('\\text{where }');
+                    const equation = parts[0].trim();
+                    const explanation = parts[1].trim();
+                    
+                    const renderedEquation = katex.renderToString(equation, {
+                        displayMode: true,
+                        throwOnError: false,
+                        trust: true,
+                        strict: false,
+                        macros: {
+                            "\\cases": "\\begin{cases}#1\\end{cases}",
+                            "\\text": "\\textrm{#1}"
+                        }
+                    });
+                    
+                    const explanationHtml = marked.parse(`**Where:**\n${explanation}`);
+                    
+                    return `<div class="math-display">${renderedEquation}</div>${explanationHtml}`;
+                }
+                
+                // Normal equation rendering
+                const rendered = katex.renderToString(tex, {
+                    displayMode: displayMode,
+                    throwOnError: false,
+                    trust: true,
+                    strict: false,
+                    macros: {
+                        "\\cases": "\\begin{cases}#1\\end{cases}",
+                        "\\text": "\\textrm{#1}"
+                    }
+                });
+                
+                return displayMode 
+                    ? `<div class="math-display">${rendered}</div>`
+                    : `<span class="math-inline">${rendered}</span>`;
+            } catch (error) {
+                console.error('KaTeX error:', error);
+                return displayMode 
+                    ? `<div class="math-display text-red-500">Error rendering: ${tex}</div>`
+                    : `<span class="math-inline text-red-500">Error rendering: ${tex}</span>`;
+            }
         }
 
-        // Function to process content (markdown + math)
+        // Function to process content
         function processContent(content) {
-            // First convert markdown to HTML
-            const htmlContent = marked.parse(content);
+            // Normalize line endings and clean up content
+            content = content.replace(/\r\n/g, '\n').trim();
+            
+            // Store math expressions to protect them from markdown processing
+            const mathExpressions = [];
+            const mathPlaceholder = "MATH_EXPRESSION_PLACEHOLDER_";
+            let processedContent = content;
+            
+            // Replace display math expressions ($$...$$)
+            processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
+                const index = mathExpressions.length;
+                mathExpressions.push({tex: tex.trim(), display: true});
+                return `\n\n${mathPlaceholder}${index}\n\n`;
+            });
+            
+            // Replace inline math expressions ($...$)
+            processedContent = processedContent.replace(/(^|[^\\])\$([^$\n]+?)\$/g, (match, prefix, tex) => {
+                const index = mathExpressions.length;
+                mathExpressions.push({tex: tex.trim(), display: false});
+                return `${prefix}${mathPlaceholder}${index}`;
+            });
+            
+            // Process markdown
+            let htmlContent = marked.parse(processedContent);
+            
+            // Restore math expressions with rendered KaTeX
+            htmlContent = htmlContent.replace(new RegExp(mathPlaceholder + "(\\d+)", "g"), (match, index) => {
+                const expr = mathExpressions[parseInt(index)];
+                return renderKaTeX(expr.tex, expr.display);
+            });
+            
             return htmlContent;
         }
 
@@ -204,12 +344,9 @@
                         
                         div.innerHTML = `
                             <div class="text-xs font-medium text-gray-500 mb-2">Chunk ${index + 1}</div>
-                            <div class="text-gray-800 prose prose-sm max-w-none">${processedContent}</div>
+                            <div class="text-gray-800">${processedContent}</div>
                         `;
                         panel.appendChild(div);
-                        
-                        // Render math in this chunk
-                        renderMath(div);
                     });
                 } catch (error) {
                     console.error('Error parsing JSON:', error);
@@ -233,4 +370,4 @@
         });
     </script>
 </body>
-</html> 
+</html>
