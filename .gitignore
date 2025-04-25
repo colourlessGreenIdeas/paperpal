@@ -6,6 +6,7 @@
 *.json
 *.md
 output/*.html
+geminioutput/
 
 
 # Byte-compiled / optimized / DLL files

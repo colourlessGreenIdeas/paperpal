@@ -214,7 +214,9 @@ class Paperpal:
                     2. Use $$ for display equations (e.g., $$\\sum_{i=1}^n x_i$$)
                     3. Never use \\( or \\) or \\[ or \\] for equations
                     4. Use proper LaTeX notation for mathematical symbols
-                    5. Keep variable names and mathematical symbols consistent"""
+                    5. Keep variable names and mathematical symbols consistent
+                    6. Do not add any additional text or your own thoughts
+                     """
                     )
                 )
                 return response.text
@@ -226,7 +228,9 @@ class Paperpal:
                     2. Use $$ for display equations (e.g., $$\\sum_{i=1}^n x_i$$)
                     3. Never use \\( or \\) or \\[ or \\] for equations
                     4. Use proper LaTeX notation for mathematical symbols
-                    5. Keep variable names and mathematical symbols consistent"""},
+                    5. Keep variable names and mathematical symbols consistent
+                    6. Do not add any additional text or your own thoughts
+                     """},
                     {"role": "user", "content": prompt}
                 ]
 
@@ -288,6 +292,7 @@ class Paperpal:
                 8. Do not repeat explanations that were already covered in previous sections
                 9. If a concept was already explained in a previous section, you can refer to it briefly
                 10. Focus on new information and concepts not covered in previous sections
+                11. Do not add any additional text or your own thoughts
 
                 Overall Paper Context and Previously Simplified Content:
                 {context}
@@ -369,6 +374,43 @@ class Paperpal:
         html_path = os.path.join(output_dir, f"{base_name}_comparison.html")
         self._generate_html_comparison(simplified_content, html_path, base_name)
         
+    def _format_content(self, content: str) -> str:
+        """Helper method to format content with consistent equation and table handling."""
+        # Replace equation delimiters
+        formatted = (content.replace("\\(", "$")
+                          .replace("\\)", "$")
+                          .replace("\\[", "$$")
+                          .replace("\\]", "$$"))
+        
+        # Handle equation blocks
+        lines = formatted.split('\n')
+        formatted_lines = []
+        in_equation_block = False
+        
+        for line in lines:
+            if any(marker in line.lower() for marker in ["equation:", "formula:", "where:", "s.t.:", "subject to:"]):
+                if not in_equation_block:
+                    formatted_lines.append("\n$$")
+                    in_equation_block = True
+                clean_line = (line.replace("equation:", "")
+                                .replace("formula:", "")
+                                .replace("where:", "\\text{where }")
+                                .strip())
+                formatted_lines.append(clean_line)
+            else:
+                if in_equation_block and line.strip():
+                    formatted_lines.append(line.strip())
+                elif in_equation_block:
+                    formatted_lines.append("$$\n")
+                    in_equation_block = False
+                else:
+                    formatted_lines.append(line)
+        
+        if in_equation_block:
+            formatted_lines.append("$$\n")
+        
+        return '\n'.join(formatted_lines)
+    
     def _save_markdown(self, chunks: List[str], output_path: str, grade_level: str):
         """Save content to a formatted Markdown file."""
         try:
@@ -383,54 +425,17 @@ class Paperpal:
                 # Write executive summary
                 f.write("## Executive Summary\n\n")
                 summary = chunks[0] if chunks else ""
-                summary = (summary.replace("\\(", "$")
-                                .replace("\\)", "$")
-                                .replace("\\[", "$$")
-                                .replace("\\]", "$$"))
-                f.write(f"{summary}\n\n")
+                f.write(f"{self._format_content(summary)}\n\n")
                 
                 # Write main content
                 f.write("## Main Content\n\n")
                 for chunk in chunks[1:]:
-                    processed_chunk = (chunk.replace("\\(", "$")
-                                         .replace("\\)", "$")
-                                         .replace("\\[", "$$")
-                                         .replace("\\]", "$$"))
-                    
-                    # Handle equation blocks
-                    lines = processed_chunk.split('\n')
-                    formatted_lines = []
-                    in_equation_block = False
-                    
-                    for line in lines:
-                        if any(marker in line.lower() for marker in ["equation:", "formula:", "where:", "s.t.:", "subject to:"]):
-                            if not in_equation_block:
-                                formatted_lines.append("\n$$")
-                                in_equation_block = True
-                            clean_line = (line.replace("equation:", "")
-                                            .replace("formula:", "")
-                                            .replace("where:", "\\text{where }")
-                                            .strip())
-                            formatted_lines.append(clean_line)
-                        else:
-                            if in_equation_block and line.strip():
-                                formatted_lines.append(line.strip())
-                            elif in_equation_block:
-                                formatted_lines.append("$$\n")
-                                in_equation_block = False
-                            else:
-                                formatted_lines.append(line)
-                    
-                    if in_equation_block:
-                        formatted_lines.append("$$\n")
-                    
-                    processed_chunk = '\n'.join(formatted_lines)
-                    f.write(f"{processed_chunk}\n\n")
+                    f.write(f"{self._format_content(chunk)}\n\n")
                 
-                # Add footnote about math rendering
-                f.write("---\n\n")
-                f.write("*Note: This document uses KaTeX/MathJax compatible math notation. ")
-                f.write("For best viewing in VS Code, install the 'Markdown Preview Enhanced' extension.*\n")
+                # # Add footnote about math rendering
+                # f.write("---\n\n")
+                # f.write("*Note: This document uses KaTeX/MathJax compatible math notation. ")
+                # f.write("For best viewing in VS Code, install the 'Markdown Preview Enhanced' extension.*\n")
                 
             logger.info(f"Saved {grade_level} markdown to {output_path}")
         except Exception as e:
@@ -440,13 +445,16 @@ class Paperpal:
     def _save_json(self, chunks: List[str], output_path: str, grade_level: str):
         """Save content to a JSON file."""
         try:
+            # Format all chunks
+            formatted_chunks = [self._format_content(chunk) for chunk in chunks]
+            
             content = {
                 "metadata": {
                     "grade_level": grade_level,
                     "total_chunks": len(chunks),
                     "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")
                 },
-                "chunks": chunks
+                "chunks": formatted_chunks
             }
             
             with open(output_path, 'w', encoding='utf-8') as f:
