@@ -5,7 +5,9 @@
 *.pdf
 *.json
 *.md
-*.html
+output/*.html
+geminioutput/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
