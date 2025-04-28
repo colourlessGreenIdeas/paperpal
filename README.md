@@ -12,10 +12,12 @@ A Python-based tool that simplifies research papers while preserving key insight
 - Preserves any mathematical equations and formulas
 - Maintains paper structure and key insights
 - Real-time output preview during processing
+- Supports multiple AI providers: OpenAI, Azure OpenAI, and Google Gemini
 
 ### Output Formats
 - **Markdown**: Clean, readable format with LaTeX equation support
-- **JSON**: Structured data format for further processing. *This output is turned off for now since I don't quite know what to do with it yet*
+- **JSON**: Structured data format for further processing
+- **HTML Comparison View**: Side-by-side comparison of different simplified versions using the included `compare.html` viewer
 - **PDF**: to convert the markdown file into pdf, run the `md_to_pdf.py` script
 
 ## Prerequisites
@@ -96,9 +98,9 @@ The project uses several Python packages:
 
 #### Core Dependencies
 - `openai`: For OpenAI and Azure OpenAI API
+- `google-genai`: For Google Gemini API
 - `PyPDF2`: PDF text extraction (v3.0.1)
 - `tiktoken`: Token counting for API calls (v0.5.2)
-- `langchain`: LLM framework and utilities
 - `python-dotenv`: Environment variable management (v1.0.0)
 
 #### PDF and Markdown Processing
@@ -117,6 +119,10 @@ The project uses several Python packages:
 - Azure OpenAI API key
 - Azure OpenAI endpoint
 - Deployment name for GPT model
+
+### Google Gemini Requirements
+- Google API key (for Gemini access)
+- Gemini model name (optional, defaults to gemini-2.0-flash-001)
 
 ## Installation
 
@@ -172,6 +178,19 @@ python paperpal.py input.pdf -g undergraduate
 python paperpal.py input.pdf -g phd
 ```
 
+### Specify AI Provider
+You can choose between different AI providers:
+```bash
+# Use OpenAI (default)
+python paperpal.py input.pdf -p openai
+
+# Use Azure OpenAI
+python paperpal.py input.pdf -p azure
+
+# Use Google Gemini
+python paperpal.py input.pdf -p gemini
+```
+
 Available grade levels:
 - Elementary: `grade1` through `grade6`
 - Middle School: `grade7` and `grade8`
@@ -181,8 +200,16 @@ Available grade levels:
 
 ### Output Files
 The script generates files with the grade level in the filename:
-- `{input}_simplified_{grade_level}.md`: Markdown output
-- `{input}_simplified_{grade_level}.json`: JSON output
+- `{input}_{grade_level}.md`: Markdown output
+- `{input}_{grade_level}.json`: JSON output for further processing or use with the comparison viewer
+
+### Using the Comparison Viewer
+The project includes an HTML-based comparison viewer for side-by-side viewing of different simplification levels:
+
+1. Open `compare.html` in any modern web browser
+2. Upload a JSON file from your `output` directory to the left panel
+3. Upload another JSON file with a different grade level to the right panel
+4. The viewer will display both versions side by side with synchronized scrolling
 
 ### To convert the output markdown (.md) files to pdf, run the `md_to_pdf.py` script:
 
@@ -222,14 +249,14 @@ optionally, provide an outputname if you wish:
 
 ### Environment Issues
 
-1. **Azure OpenAI Configuration**
-   - Verify all environment variables are set
-   - Check API key format
-   - Confirm endpoint URL format
-   - Verify deployment name exists
+1. **API Configuration**
+   - Verify all environment variables are set in your `.env` file
+   - For OpenAI: Check OPENAI_API_KEY format
+   - For Azure: Check API key, endpoint URL, and deployment name
+   - For Gemini: Check GOOGLE_API_KEY format and verify model name
 
 2. **Virtual Environment**
-   - Ensure venv is activated
+   - Ensure venv or conda environment is activated
    - Check Python version: `python --version`
    - Verify package installation: `pip list`
 
@@ -277,19 +304,6 @@ The PDF conversion includes options for:
    - Check file permissions
    - Verify poppler installation
 
-### Environment Issues
-
-1. **Azure OpenAI Configuration**
-   - Verify all environment variables are set
-   - Check API key format
-   - Confirm endpoint URL format
-   - Verify deployment name exists
-
-2. **Virtual Environment**
-   - Ensure venv is activated
-   - Check Python version: `python --version`
-   - Verify package installation: `pip list`
-
 ## Configuration
 
 ### Paper Simplifier Settings
@@ -327,9 +341,9 @@ Contributions are welcome! Feel free to:
   - Add a recursive summary
   - Add image and figure support
 
-- [ ] Additional Model Providers
+- [x] Additional Model Providers
   - Add Anthropic Claude support
-  - Add Google Gemini support
+  - ✅ Add Google Gemini support
   - Add local model support via Ollama/others?
   - Support custom model deployments
 

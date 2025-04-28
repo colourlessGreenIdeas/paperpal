@@ -369,10 +369,7 @@ class Paperpal:
             # Save JSON
             json_path = os.path.join(output_dir, f"{base_name}_{grade_level}.json")
             self._save_json(chunks, json_path, grade_level)
-        
-        # Generate HTML comparison file
-        html_path = os.path.join(output_dir, f"{base_name}_comparison.html")
-        self._generate_html_comparison(simplified_content, html_path, base_name)
+    
         
     def _format_content(self, content: str) -> str:
         """Helper method to format content with consistent equation and table handling."""
@@ -465,74 +462,6 @@ class Paperpal:
             logger.error(f"Error saving {grade_level} JSON: {str(e)}")
             raise
     
-    def _generate_html_comparison(self, simplified_content: Dict[str, List[str]], output_path: str, base_name: str):
-        """Generate an HTML file comparing all grade levels."""
-        try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write("""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Paper Comparison: """ + base_name + """</title>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; }
-        h1 { text-align: center; margin-bottom: 30px; }
-        .grade-section { margin-bottom: 40px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
-        .grade-title { color: #2c3e50; margin-bottom: 10px; }
-        .chunk { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 5px; }
-        .chunk-number { font-weight: bold; color: #7f8c8d; margin-bottom: 5px; }
-        nav { position: fixed; top: 0; right: 0; background: white; padding: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        nav a { display: block; margin: 5px 0; color: #3498db; text-decoration: none; }
-        nav a:hover { text-decoration: underline; }
-        .content { max-width: 900px; margin: 0 auto; }
-    </style>
-</head>
-<body>
-    <nav>
-        <h3>Grade Levels</h3>
-""")
-                
-                # Write navigation links
-                for grade in simplified_content.keys():
-                    f.write(f'        <a href="#grade-{grade}">{grade}</a>\n')
-                
-                f.write("""
-    </nav>
-    <div class="content">
-        <h1>Paper Simplification Comparison: """ + base_name + """</h1>
-""")
-                
-                # Write content for each grade level
-                for grade_level, chunks in simplified_content.items():
-                    f.write(f'        <div class="grade-section" id="grade-{grade_level}">\n')
-                    f.write(f'            <h2 class="grade-title">{grade_level} - {self.get_grade_level_description(grade_level)}</h2>\n')
-                    
-                    for i, chunk in enumerate(chunks):
-                        processed_chunk = (chunk.replace("\\(", "$")
-                                             .replace("\\)", "$")
-                                             .replace("\\[", "$$")
-                                             .replace("\\]", "$$"))
-                        
-                        f.write(f'            <div class="chunk">\n')
-                        f.write(f'                <div class="chunk-number">Chunk {i+1}</div>\n')
-                        f.write(f'                <div>{processed_chunk}</div>\n')
-                        f.write('            </div>\n')
-                    
-                    f.write('        </div>\n')
-                
-                f.write("""
-    </div>
-</body>
-</html>
-""")
-            
-            logger.info(f"Saved HTML comparison to {output_path}")
-        except Exception as e:
-            logger.error(f"Error generating HTML comparison: {str(e)}")
-            raise
     
     def process_paper(self, input_pdf_path: str, output_dir: str = "output", grade_levels: List[str] = None):
         """Main method to process and simplify an academic paper at all grade levels."""
