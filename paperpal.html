@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperPal - Academic Paper Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #64748b;
+            --success: #22c55e;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background-color: var(--background);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 1rem;
+            background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-light);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--primary);
+            border-radius: 1rem;
+            padding: 3rem 2rem;
+            text-align: center;
+            background: var(--surface);
+            margin-bottom: 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary-dark);
+            background: #fafbff;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--success);
+            background: #f0fdf4;
+        }
+
+        .upload-area h3 {
+            color: var(--primary);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .upload-area p {
+            color: var(--text-light);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .sample-data {
+            text-align: center;
+            margin: 2rem 0;
+        }
+
+        .sample-btn {
+            background: var(--surface);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 0.75rem 1.5rem;
+            margin: 0.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .sample-btn:hover {
+            background: var(--primary);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .content-area {
+            background: var(--surface);
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: var(--shadow-lg);
+            min-height: 400px;
+        }
+
+        .paper-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .paper-content h1 {
+            color: var(--text);
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .paper-content h2 {
+            color: var(--text);
+            font-size: 1.5rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            padding-left: 1rem;
+            border-left: 3px solid var(--primary);
+        }
+
+        .paper-content p {
+            margin-bottom: 1rem;
+            color: var(--text);
+            line-height: 1.8;
+        }
+
+        .metadata {
+            background: #f8fafc;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-light);
+        }
+
+        .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        .image-container {
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow-md);
+            transition: transform 0.3s ease;
+        }
+
+        .image-container img:hover {
+            transform: scale(1.02);
+        }
+
+        .equation {
+            margin: 2rem 0;
+            padding: 1.5rem;
+            background: #f8fafc;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+        }
+
+        .error {
+            background: #fef2f2;
+            color: #991b1b;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            margin: 1.5rem 0;
+            border: 1px solid #fecaca;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .content-area {
+                padding: 1.5rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 PaperPal</h1>
+            <p>A beautiful way to view and share academic papers. Upload PDF, Markdown, or JSON files to get started.</p>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <h3>Drop your file here</h3>
+            <p>Supports PDF, Markdown (.md), and JSON files</p>
+            <input type="file" id="fileInput" class="file-input" accept=".pdf,.md,.json">
+        </div>
+
+        <div class="sample-data">
+            <button class="sample-btn" onclick="loadSampleJSON()">Try Sample Paper</button>
+        </div>
+
+        <div class="content-area">
+            <div id="contentDisplay">
+                <div class="loading">
+                    <h3>Welcome to PaperPal</h3>
+                    <p>Upload a file or try the sample paper to get started.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // File handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const contentDisplay = document.getElementById('contentDisplay');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('drop', handleDrop);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            processFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            processFiles(files);
+        }
+
+        function processFiles(files) {
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            const extension = file.name.split('.').pop().toLowerCase();
+            
+            showLoading();
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                
+                try {
+                    // Auto-detect format based on file extension and content
+                    if (extension === 'json' || isJSON(content)) {
+                        renderJSON(JSON.parse(content));
+                    } else if (extension === 'md' || extension === 'markdown' || looksLikeMarkdown(content)) {
+                        renderMarkdown(content);
+                    } else if (extension === 'pdf') {
+                        showError('PDF support coming soon! Please use JSON or Markdown files for now.');
+                    } else {
+                        // Default to markdown if format is unclear
+                        renderMarkdown(content);
+                    }
+                } catch (error) {
+                    showError('Error processing file: ' + error.message);
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+
+        function isJSON(str) {
+            try {
+                JSON.parse(str);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function looksLikeMarkdown(content) {
+            // Simple heuristic to detect markdown-like content
+            const markdownPatterns = [
+                /^#\s/m,           // Headers
+                /\*\*(.*?)\*\*/,   // Bold text
+                /\[(.*?)\]\((.*?)\)/, // Links
+                /```/,             // Code blocks
+                /^\s*[-*+]\s/m     // Lists
+            ];
+            return markdownPatterns.some(pattern => pattern.test(content));
+        }
+
+        function showLoading() {
+            contentDisplay.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Processing your document...</p>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            contentDisplay.innerHTML = `
+                <div class="error">
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+        }
+
+        function renderJSON(data) {
+            let html = '<div class="paper-content">';
+            
+            // Add metadata if available
+            if (data.metadata) {
+                html += `
+                    <div class="metadata">
+                        <strong>Document Info</strong><br>
+                        ${Object.entries(data.metadata).map(([key, value]) => 
+                            `${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: ${value}`
+                        ).join('<br>')}
+                    </div>
+                `;
+            }
+            
+            // Process chunks
+            if (data.chunks && Array.isArray(data.chunks)) {
+                data.chunks.forEach((chunk, index) => {
+                    html += processContent(chunk);
+                });
+            } else {
+                html += '<p>No content found in document.</p>';
+            }
+            
+            html += '</div>';
+            contentDisplay.innerHTML = html;
+            renderMath();
+        }
+
+        function renderMarkdown(content) {
+            const processedContent = processContent(content);
+            const html = `<div class="paper-content">${processedContent}</div>`;
+            contentDisplay.innerHTML = html;
+            renderMath();
+        }
+
+        function processContent(content) {
+            if (!content) return '';
+            
+            // First escape any existing HTML to prevent it from being treated as text
+            content = content.replace(/&/g, '&amp;')
+                           .replace(/</g, '&lt;')
+                           .replace(/>/g, '&gt;');
+
+            // Process custom image format
+            content = content.replace(/\[IMAGE:\s*([^\]]+)\]/g, (match, imageName) => {
+                return createImageHTML(imageName);
+            });
+            
+            // Convert markdown to HTML with custom renderer
+            const renderer = new marked.Renderer();
+            
+            // Custom image renderer
+            renderer.image = (href, title, text) => {
+                return createImageHTML(href, text);
+            };
+            
+            marked.setOptions({
+                renderer: renderer,
+                gfm: true,
+                breaks: true,
+                smartLists: true,
+                smartypants: true
+            });
+            
+            // Process block equations
+            content = content.replace(/\$\$([\s\S]+?)\$\$/g, (match, equation) => {
+                return `<div class="equation" data-equation="${equation.trim()}"></div>`;
+            });
+            
+            // Process inline equations
+            content = content.replace(/\$([^$]+)\$/g, (match, equation) => {
+                return `<span class="inline-equation" data-equation="${equation.trim()}"></span>`;
+            });
+            
+            try {
+                return marked.parse(content);
+            } catch (error) {
+                console.error('Markdown parsing error:', error);
+                return content
+                    .replace(/\n\n/g, '</p><p>')
+                    .replace(/\n/g, '<br>')
+                    .replace(/^\s*/, '<p>')
+                    .replace(/\s*$/, '</p>');
+            }
+        }
+
+        function createImageHTML(src, alt = '') {
+            // Clean up the source path
+            src = src.trim();
+            if (!src.startsWith('http') && !src.startsWith('data:')) {
+                // Remove any 'output/images/' prefix if it exists
+                src = src.replace(/^(?:output\/images\/)?/, '');
+                // Add the correct prefix
+                src = `output/images/${src}`;
+            }
+            
+            return `<div class="image-container">
+                <img src="${src}" 
+                     alt="${alt || src}" 
+                     loading="lazy"
+                     onclick="showImageModal('${src}')"
+                />
+            </div>`;
+        }
+
+        function renderMath() {
+            document.querySelectorAll('[data-equation]').forEach(element => {
+                const equation = element.getAttribute('data-equation');
+                const isBlock = element.classList.contains('equation');
+                
+                try {
+                    katex.render(equation, element, {
+                        displayMode: isBlock,
+                        throwOnError: false,
+                        trust: true
+                    });
+                } catch (error) {
+                    console.error('KaTeX rendering error:', error);
+                    element.innerHTML = `<span class="error">Error rendering equation: ${equation}</span>`;
+                }
+            });
+        }
+
+        // Sample data
+        const sampleJSON = {
+            "metadata": {
+                "title": "Understanding Deep Learning in Modern Context",
+                "authors": "John Doe, Jane Smith",
+                "date": "2024-03-15",
+                "keywords": "deep learning, AI, neural networks"
+            },
+            "chunks": [
+                "# Understanding Deep Learning\n\nThis research explores the fundamental concepts of deep learning and its applications in modern context. We present a comprehensive analysis of neural network architectures and their impact on various domains.",
+                
+                "## Key Concepts\n\nThe basic neural network architecture can be represented by the following equation:\n\n$$h(x) = \\sigma(Wx + b)$$\n\nwhere $\\sigma$ represents the activation function, $W$ is the weight matrix, and $b$ is the bias vector.",
+                
+                "## Results\n\nOur experiments show significant improvements in model performance:\n\n| Model | Accuracy | F1-Score |\n|-------|----------|----------|\n| CNN   | 95.5%    | 0.94     |\n| LSTM  | 97.2%    | 0.96     |",
+                
+                "[IMAGE: neural_network.png]\n\nFigure 1: Architecture of our proposed neural network model."
+            ]
+        };
+
+        function loadSampleJSON() {
+            showLoading();
+            setTimeout(() => {
+                renderJSON(sampleJSON);
+            }, 500);
+        }
+
+        function showImageModal(src) {
+            const modal = document.createElement('div');
+            modal.style.position = 'fixed';
+            modal.style.top = 0;
+            modal.style.left = 0;
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.9)';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = 10000;
+            modal.style.cursor = 'zoom-out';
+            
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.maxWidth = '90vw';
+            img.style.maxHeight = '90vh';
+            img.style.objectFit = 'contain';
+            img.style.borderRadius = '0.5rem';
+            img.style.boxShadow = '0 4px 32px rgba(0,0,0,0.3)';
+            img.style.transition = 'transform 0.3s ease';
+            
+            modal.appendChild(img);
+            modal.onclick = () => document.body.removeChild(modal);
+            document.body.appendChild(modal);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('PaperPal loaded successfully');
+        });
+    </script>
+</body>
+</html>
