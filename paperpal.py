@@ -396,37 +396,35 @@ class Paperpal:
         await self.cache_manager.set(chunk, context, grade_level, simplified)
         return simplified
 
-    async def   process_all_grade_levels(self, chunks: List[Dict], grade_levels: List[str]) -> Dict[str, List[str]]:
+    async def process_all_grade_levels(self, chunks: List[Dict], grade_levels: List[str]) -> Dict[str, List[str]]:
         results = {grade: [] for grade in grade_levels}
-        tasks = []
+        llm_tasks = []
+        llm_task_indices = []
         # Track which images have already been inserted
         inserted_images = {grade: set() for grade in grade_levels}
 
+        # Schedule LLM calls for all text chunks
         for idx, chunk in enumerate(chunks):
             for grade_level in grade_levels:
                 if chunk['text'].strip():
-                    tasks.append((idx, grade_level, chunk['text']))
+                    context = ''  # You can add context logic if needed
+                    prompt = self.get_prompt(chunk['text'], context, grade_level)
+                    llm_tasks.append(self.language_model.get_completion(prompt, SYSTEM_PROMPT, self.temperature))
+                    llm_task_indices.append((idx, grade_level))
                 else:
-                    # If chunk is only images, skip LLM and just append images after previous chunk
-                    tasks.append((idx, grade_level, None))
+                    llm_tasks.append(None)
+                    llm_task_indices.append((idx, grade_level))
 
-        # Use tqdm_asyncio for progress bar
-        pbar = tqdm_asyncio(total=len(tasks), desc="Simplifying Chunks")
+        # Run all LLM calls in parallel (filter out None)
+        llm_results = await asyncio.gather(*[t for t in llm_tasks if t is not None])
+        llm_iter = iter(llm_results)
         llm_outputs = {}
-        for idx, grade_level, text in tasks:
-            if text is not None:
-                context = ''  # You can add context logic if needed
-                prompt = self.get_prompt(text, context, grade_level)
-                try:
-                    result = await self.language_model.get_completion(prompt, SYSTEM_PROMPT, self.temperature)
-                except Exception as e:
-                    logger.error(f"Error processing chunk {idx} for {grade_level}: {e}")
-                    result = f"ERROR: Processing failed - {e}"
-                llm_outputs[(idx, grade_level)] = result
+        for i, t in enumerate(llm_tasks):
+            idx, grade_level = llm_task_indices[i]
+            if t is not None:
+                llm_outputs[(idx, grade_level)] = next(llm_iter)
             else:
                 llm_outputs[(idx, grade_level)] = ''
-            pbar.update(1)
-        pbar.close()
 
         # Now, assemble the final output, appending images only after the first chunk in which they appear
         for grade_level in grade_levels:
