@@ -207,18 +207,6 @@
             xhtml: true
         });
 
-        // Synchronize scrolling between panels
-        const leftPanel = document.getElementById('leftPanel');
-        const rightPanel = document.getElementById('rightPanel');
-        
-        leftPanel.addEventListener('scroll', () => {
-            rightPanel.scrollTop = leftPanel.scrollTop;
-        });
-        
-        rightPanel.addEventListener('scroll', () => {
-            leftPanel.scrollTop = rightPanel.scrollTop;
-        });
-
         // Function to render math expressions with KaTeX
         function renderKaTeX(tex, displayMode) {
             try {
@@ -285,7 +273,10 @@
         function processContent(content) {
             // Normalize line endings and clean up content
             content = content.replace(/\r\n/g, '\n').trim();
-            
+            // Render images: Replace [IMAGE: ...] with <img src="images/...">
+            content = content.replace(/\[IMAGE:\s*(.*?)\s*\]/g, function(_, filename) {
+                return `<img src="output/images/${filename.trim()}" style="max-width:100%;margin:1em 0;" />`;
+            });
             // Store math expressions to protect them from markdown processing
             const mathExpressions = [];
             const mathPlaceholder = "MATH_EXPRESSION_PLACEHOLDER_";

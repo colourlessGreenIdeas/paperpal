@@ -5,7 +5,7 @@
 *.pdf
 *.json
 *.md
-output/*.html
+output/
 geminioutput/
 
 
