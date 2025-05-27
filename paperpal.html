@@ -239,105 +239,6 @@
                 font-size: 2rem;
             }
         }
-
-        .file-list {
-            background: var(--surface);
-            border-radius: 1rem;
-            box-shadow: var(--shadow-md);
-            margin: 2rem 0;
-            overflow: hidden;
-        }
-
-        .file-list-header {
-            background: var(--primary);
-            color: white;
-            padding: 1rem 1.5rem;
-            font-weight: 600;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .file-list-header button {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            color: white;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: background 0.3s ease;
-        }
-
-        .file-list-header button:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .file-list-content {
-            max-height: 300px;
-            overflow-y: auto;
-            padding: 0.5rem;
-        }
-
-        .file-item {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-
-        .file-item:last-child {
-            border-bottom: none;
-        }
-
-        .file-item:hover {
-            background: #f8fafc;
-        }
-
-        .file-item.active {
-            background: #f0f7ff;
-            border-left: 3px solid var(--primary);
-        }
-
-        .file-item-name {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .file-item-name span {
-            font-size: 1.2rem;
-        }
-
-        .file-item-info {
-            color: var(--text-light);
-            font-size: 0.9rem;
-        }
-
-        .file-item-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .file-item-actions button {
-            background: none;
-            border: 1px solid var(--border);
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.25rem;
-            color: var(--text-light);
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
-        }
-
-        .file-item-actions button:hover {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
     </style>
 </head>
 <body>
@@ -351,16 +252,6 @@
             <h3>Drop your file here</h3>
             <p>Supports PDF, Markdown (.md), and JSON files</p>
             <input type="file" id="fileInput" class="file-input" accept=".pdf,.md,.json">
-        </div>
-
-        <div class="file-list">
-            <div class="file-list-header">
-                <span>Generated Files</span>
-                <button onclick="refreshFileList()">↻ Refresh</button>
-            </div>
-            <div class="file-list-content" id="fileList">
-                <!-- Files will be listed here -->
-            </div>
         </div>
 
         <div class="sample-data">
@@ -419,24 +310,22 @@
             
             showLoading();
             
-            if (extension === 'pdf') {
-                showError('PDF processing is currently disabled. Please use JSON or Markdown files.');
-                return;
-            }
-            
             const reader = new FileReader();
             reader.onload = function(e) {
                 const content = e.target.result;
                 
                 try {
+                    // Auto-detect format based on file extension and content
                     if (extension === 'json' || isJSON(content)) {
                         renderJSON(JSON.parse(content));
                     } else if (extension === 'md' || extension === 'markdown' || looksLikeMarkdown(content)) {
                         renderMarkdown(content);
+                    } else if (extension === 'pdf') {
+                        showError('PDF support coming soon! Please use JSON or Markdown files for now.');
                     } else {
+                        // Default to markdown if format is unclear
                         renderMarkdown(content);
                     }
-                    refreshFileList(); // Refresh file list after processing
                 } catch (error) {
                     showError('Error processing file: ' + error.message);
                 }
@@ -661,125 +550,9 @@
             document.body.appendChild(modal);
         }
 
-        async function refreshFileList() {
-            const fileList = document.getElementById('fileList');
-            fileList.innerHTML = '<div class="loading">Loading files...</div>';
-            
-            try {
-                const response = await fetch('/api/list-files');
-                if (!response.ok) throw new Error('Failed to fetch file list');
-                
-                const files = await response.json();
-                
-                if (files.length === 0) {
-                    fileList.innerHTML = '<div class="file-item">No files found in output directory</div>';
-                    return;
-                }
-                
-                fileList.innerHTML = files.map(file => `
-                    <div class="file-item" onclick="loadFile('${file.path}')">
-                        <div class="file-item-name">
-                            <span>${getFileIcon(file.type)}</span>
-                            ${file.name}
-                        </div>
-                        <div class="file-item-info">
-                            ${formatFileSize(file.size)} • ${formatDate(file.modified)}
-                        </div>
-                        <div class="file-item-actions">
-                            <button onclick="event.stopPropagation(); viewRawFile('${file.path}')">View Raw</button>
-                            <button onclick="event.stopPropagation(); deleteFile('${file.path}')" class="delete-btn">Delete</button>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                fileList.innerHTML = `<div class="error">Error loading files: ${error.message}</div>`;
-            }
-        }
-
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
-
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-        }
-
-        function getFileIcon(type) {
-            const icons = {
-                'json': '📊',
-                'markdown': '📝',
-                'pdf': '📄',
-                'image': '🖼️'
-            };
-            return icons[type] || '📄';
-        }
-
-        async function loadFile(path) {
-            showLoading();
-            try {
-                const response = await fetch(`/api/file/${path}`);
-                if (!response.ok) throw new Error('Failed to load file');
-                
-                const content = await response.text();
-                if (path.endsWith('.json')) {
-                    renderJSON(JSON.parse(content));
-                } else if (path.endsWith('.md')) {
-                    renderMarkdown(content);
-                }
-            } catch (error) {
-                showError(`Error loading file: ${error.message}`);
-            }
-        }
-
-        async function viewRawFile(path) {
-            try {
-                const response = await fetch(`/api/file/${path}`);
-                if (!response.ok) throw new Error('Failed to load file');
-                
-                const content = await response.text();
-                contentDisplay.innerHTML = `
-                    <div class="paper-content">
-                        <pre style="background:#f8fafc;padding:1rem;border-radius:0.5rem;overflow-x:auto;font-family:monospace;">
-                            <code>${escapeHtml(content)}</code>
-                        </pre>
-                    </div>
-                `;
-            } catch (error) {
-                showError(`Error loading raw file: ${error.message}`);
-            }
-        }
-
-        async function deleteFile(path) {
-            if (!confirm('Are you sure you want to delete this file?')) return;
-            
-            try {
-                const response = await fetch(`/api/file/${path}`, { method: 'DELETE' });
-                if (!response.ok) throw new Error('Failed to delete file');
-                
-                refreshFileList();
-            } catch (error) {
-                showError(`Error deleting file: ${error.message}`);
-            }
-        }
-
-        function escapeHtml(unsafe) {
-            return unsafe
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             console.log('PaperPal loaded successfully');
-            refreshFileList();
         });
     </script>
 </body>
