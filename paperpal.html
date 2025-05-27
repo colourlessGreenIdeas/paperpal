@@ -35,11 +35,43 @@
             line-height: 1.6;
             color: var(--text);
             background-color: var(--background);
+            display: flex;
+            min-height: 100vh;
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+        .papers-sidebar {
+            width: 280px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            overflow-y: auto;
+        }
+
+        .papers-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .papers-header h2 {
+            font-size: 1.2rem;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .papers-list {
+            padding: 1rem;
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             padding: 2rem;
         }
 
@@ -61,11 +93,19 @@
         .header p {
             color: var(--text-light);
             font-size: 1.1rem;
-            max-width: 600px;
+        }
+
+        .upload-container {
+            width: 100%;
+            max-width: 800px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .upload-area {
+            width: 100%;
             border: 2px dashed var(--primary);
             border-radius: 1rem;
             padding: 3rem 2rem;
@@ -74,14 +114,12 @@
             margin-bottom: 2rem;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: var(--shadow-sm);
         }
 
         .upload-area:hover {
             border-color: var(--primary-dark);
             background: #fafbff;
             transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
         }
 
         .upload-area.dragover {
@@ -89,43 +127,115 @@
             background: #f0fdf4;
         }
 
-        .upload-area h3 {
-            color: var(--primary);
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .upload-area p {
-            color: var(--text-light);
-        }
-
-        .file-input {
-            display: none;
-        }
-
-        .sample-data {
-            text-align: center;
+        .grade-selector {
             margin: 2rem 0;
+            text-align: center;
         }
 
-        .sample-btn {
-            background: var(--surface);
-            color: var(--primary);
-            border: 1px solid var(--primary);
+        .grade-selector select {
             padding: 0.75rem 1.5rem;
-            margin: 0.5rem;
             border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            font-size: 1rem;
+            color: var(--text);
             cursor: pointer;
-            font-size: 0.9rem;
+            margin-right: 1rem;
+        }
+
+        .simplify-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
             font-weight: 500;
+            cursor: pointer;
             transition: all 0.3s ease;
         }
 
-        .sample-btn:hover {
-            background: var(--primary);
-            color: white;
+        .simplify-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .simplify-btn:disabled {
+            background: var(--secondary);
+            cursor: not-allowed;
+        }
+
+        .file-list {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 2rem;
+            background: var(--surface);
+            border-radius: 1rem;
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .file-item {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            transition: all 0.2s ease;
+        }
+
+        .file-item:hover {
+            border-color: var(--primary);
             transform: translateY(-1px);
             box-shadow: var(--shadow-sm);
+        }
+
+        .file-item.active {
+            background: #f0f7ff;
+            border-color: var(--primary);
+        }
+
+        .file-item-name {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .file-item-info {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-bottom: 0.5rem;
+        }
+
+        .file-item-actions {
+            display: flex;
+            gap: 0.5rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .file-item:hover .file-item-actions {
+            opacity: 1;
+        }
+
+        .file-item-actions button {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .delete-btn {
+            color: #ef4444 !important;
+            border-color: #ef4444 !important;
+        }
+
+        .delete-btn:hover {
+            background: #ef4444 !important;
+            color: white !important;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
         }
 
         .content-area {
@@ -227,43 +337,55 @@
         }
 
         @media (max-width: 768px) {
-            .container {
+            .papers-sidebar {
+                display: none;
+            }
+
+            .main-content {
+                margin-left: 0;
                 padding: 1rem;
-            }
-            
-            .content-area {
-                padding: 1.5rem;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="papers-sidebar">
+        <div class="papers-header">
+            <h2>Papers</h2>
+            <p>Select a paper to view its simplified versions</p>
+        </div>
+        <div class="papers-list" id="papersList">
+            <!-- Papers will be listed here -->
+        </div>
+    </div>
+
+    <div class="main-content">
         <div class="header">
             <h1>📄 PaperPal</h1>
-            <p>A beautiful way to view and share academic papers. Upload PDF, Markdown, or JSON files to get started.</p>
+            <p>Upload academic papers and get simplified versions tailored to different grade levels.</p>
         </div>
 
-        <div class="upload-area" id="uploadArea">
-            <h3>Drop your file here</h3>
-            <p>Supports PDF, Markdown (.md), and JSON files</p>
-            <input type="file" id="fileInput" class="file-input" accept=".pdf,.md,.json">
-        </div>
+        <div class="upload-container">
+            <div class="upload-area" id="uploadArea">
+                <h3>Drop your PDF here</h3>
+                <p>or click to select a file</p>
+                <input type="file" id="fileInput" class="file-input" accept=".pdf" style="display: none;">
+            </div>
 
-        <div class="sample-data">
-            <button class="sample-btn" onclick="loadSampleJSON()">Try Sample Paper</button>
-        </div>
+            <div class="grade-selector">
+                <select id="gradeLevel">
+                    <option value="">Select Grade Level</option>
+                    <option value="elementary">Elementary School</option>
+                    <option value="middle">Middle School</option>
+                    <option value="high">High School</option>
+                    <option value="undergraduate">Undergraduate</option>
+                    <option value="graduate">Graduate</option>
+                </select>
+                <button id="simplifyBtn" class="simplify-btn" disabled>Simplify Paper</button>
+            </div>
 
-        <div class="content-area">
-            <div id="contentDisplay">
-                <div class="loading">
-                    <h3>Welcome to PaperPal</h3>
-                    <p>Upload a file or try the sample paper to get started.</p>
-                </div>
+            <div class="file-list" id="fileList">
+                <!-- Simplified versions will appear here -->
             </div>
         </div>
     </div>
@@ -554,6 +676,102 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('PaperPal loaded successfully');
         });
+
+        async function refreshFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<div class="loading">Loading files...</div>';
+            
+            try {
+                const response = await fetch('/api/list-files');
+                if (!response.ok) throw new Error('Failed to fetch file list');
+                
+                const files = await response.json();
+                
+                if (files.length === 0) {
+                    fileList.innerHTML = '<div class="file-item">No files found in output directory</div>';
+                    return;
+                }
+                
+                fileList.innerHTML = files.map(file => `
+                    <div class="file-item" onclick="loadFile('${file.path}')">
+                        <div class="file-item-name">
+                            <span>${getFileIcon(file.type)}</span>
+                            ${file.name}
+                        </div>
+                        <div class="file-item-info">
+                            ${formatFileSize(file.size)} • ${formatDate(file.modified)}
+                        </div>
+                        <div class="file-item-actions">
+                            <button onclick="event.stopPropagation(); viewRawFile('${file.path}')">View Raw</button>
+                            <button onclick="event.stopPropagation(); deleteFile('${file.path}')" class="delete-btn">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                fileList.innerHTML = `<div class="error">Error loading files: ${error.message}</div>`;
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+
+        async function loadFile(path) {
+            showLoading();
+            try {
+                const response = await fetch(`/api/file/${path}`);
+                if (!response.ok) throw new Error('Failed to load file');
+                
+                const content = await response.text();
+                if (path.endsWith('.json')) {
+                    renderJSON(JSON.parse(content));
+                } else if (path.endsWith('.md')) {
+                    renderMarkdown(content);
+                }
+            } catch (error) {
+                showError(`Error loading file: ${error.message}`);
+            }
+        }
+
+        async function viewRawFile(path) {
+            try {
+                const response = await fetch(`/api/file/${path}`);
+                if (!response.ok) throw new Error('Failed to load file');
+                
+                const content = await response.text();
+                contentDisplay.innerHTML = `
+                    <div class="paper-content">
+                        <pre style="background:#f8fafc;padding:1rem;border-radius:0.5rem;overflow-x:auto;font-family:monospace;">
+                            <code>${escapeHtml(content)}</code>
+                        </pre>
+                    </div>
+                `;
+            } catch (error) {
+                showError(`Error loading raw file: ${error.message}`);
+            }
+        }
+
+        async function deleteFile(path) {
+            if (!confirm('Are you sure you want to delete this file?')) return;
+            
+            try {
+                const response = await fetch(`/api/file/${path}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Failed to delete file');
+                
+                refreshFileList();
+            } catch (error) {
+                showError(`Error deleting file: ${error.message}`);
+            }
+        }
     </script>
 </body>
 </html>
