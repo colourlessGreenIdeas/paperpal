@@ -72,22 +72,60 @@
             margin-bottom: 1rem;
             background: var(--surface);
             overflow: hidden;
+            transition: all 0.2s ease;
         }
 
         .paper-header {
             padding: 1rem;
             border-bottom: 1px solid var(--border);
             background: #f8fafc;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
+
+        .paper-header:hover {
+            background: #f1f5f9;
         }
 
         .paper-title {
             font-weight: 600;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0;
             color: var(--text);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .paper-toggle {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            margin-left: 0.5rem;
+            transition: transform 0.2s ease;
+            transform: rotate(-90deg);  /* Default to collapsed state */
+        }
+
+        .paper-toggle.expanded {
+            transform: rotate(0deg);
         }
 
         .paper-versions {
             padding: 0.5rem;
+            display: none;  /* Default to collapsed */
+            transition: all 0.2s ease;
+        }
+
+        .paper-versions.expanded {
+            display: block;
         }
 
         .version-btn {
@@ -474,10 +512,11 @@
                 const papersList = document.getElementById('papersList');
                 papersList.innerHTML = papers.map(paper => `
                     <div class="paper-item" data-paper-id="${paper.paper_id}">
-                        <div class="paper-header">
+                        <div class="paper-header" onclick="togglePaper('${paper.paper_id}')">
                             <div class="paper-title">${paper.original_filename}</div>
+                            <div class="paper-toggle">▼</div>
                         </div>
-                        <div class="paper-versions">
+                        <div class="paper-versions" id="versions-${paper.paper_id}">
                             ${Object.entries(paper.versions).map(([grade, _]) => `
                                 <button class="version-btn" 
                                         onclick="loadPaperVersion('${paper.paper_id}', '${grade}')"
@@ -720,6 +759,14 @@
                 uploadArea.style.display = 'block';
                 uploadProgress.style.display = 'none';
             }
+        }
+
+        function togglePaper(paperId) {
+            const versionsDiv = document.getElementById(`versions-${paperId}`);
+            const toggle = versionsDiv.parentElement.querySelector('.paper-toggle');
+            
+            versionsDiv.classList.toggle('expanded');
+            toggle.classList.toggle('expanded');
         }
     </script>
 </body>
