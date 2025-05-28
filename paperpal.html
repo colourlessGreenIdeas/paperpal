@@ -66,6 +66,53 @@
             padding: 1rem;
         }
 
+        .paper-item {
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .paper-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            background: #f8fafc;
+        }
+
+        .paper-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+
+        .paper-versions {
+            padding: 0.5rem;
+        }
+
+        .version-btn {
+            display: block;
+            width: 100%;
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            text-align: left;
+            border: none;
+            background: none;
+            color: var(--text);
+            cursor: pointer;
+            border-radius: 0.25rem;
+            transition: all 0.2s ease;
+        }
+
+        .version-btn:hover {
+            background: #f1f5f9;
+        }
+
+        .version-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
         .main-content {
             flex: 1;
             margin-left: 280px;
@@ -120,6 +167,11 @@
             border-color: var(--primary-dark);
             background: #fafbff;
             transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--success);
+            background: #f0fdf4;
         }
 
         .upload-area.dragover {
@@ -362,7 +414,7 @@
     <div class="main-content">
         <div class="header">
             <h1>📄 PaperPal</h1>
-            <p>Upload academic papers and get simplified versions tailored to different grade levels.</p>
+            <p>Upload academic papers and get simplified versions for different academic levels.</p>
         </div>
 
         <div class="upload-container">
@@ -372,404 +424,185 @@
                 <input type="file" id="fileInput" class="file-input" accept=".pdf" style="display: none;">
             </div>
 
-            <div class="grade-selector">
-                <select id="gradeLevel">
-                    <option value="">Select Grade Level</option>
-                    <option value="elementary">Elementary School</option>
-                    <option value="middle">Middle School</option>
-                    <option value="high">High School</option>
-                    <option value="undergraduate">Undergraduate</option>
-                    <option value="graduate">Graduate</option>
-                </select>
-                <button id="simplifyBtn" class="simplify-btn" disabled>Simplify Paper</button>
+            <div id="uploadProgress" style="display: none;">
+                <div class="spinner"></div>
+                <p>Processing your paper... This may take a few minutes.</p>
             </div>
 
-            <div class="file-list" id="fileList">
-                <!-- Simplified versions will appear here -->
+            <div class="content-area" id="contentDisplay">
+                <!-- Paper content will be displayed here -->
             </div>
         </div>
     </div>
 
     <script>
-        // File handling
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const contentDisplay = document.getElementById('contentDisplay');
-
-        uploadArea.addEventListener('click', () => fileInput.click());
-        uploadArea.addEventListener('dragover', handleDragOver);
-        uploadArea.addEventListener('drop', handleDrop);
-        uploadArea.addEventListener('dragleave', handleDragLeave);
-        fileInput.addEventListener('change', handleFileSelect);
-
-        function handleDragOver(e) {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        }
-
-        function handleDragLeave(e) {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-        }
-
-        function handleDrop(e) {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            processFiles(files);
-        }
-
-        function handleFileSelect(e) {
-            const files = e.target.files;
-            processFiles(files);
-        }
-
-        function processFiles(files) {
-            if (files.length === 0) return;
-            
-            const file = files[0];
-            const extension = file.name.split('.').pop().toLowerCase();
-            
-            showLoading();
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                
-                try {
-                    // Auto-detect format based on file extension and content
-                    if (extension === 'json' || isJSON(content)) {
-                        renderJSON(JSON.parse(content));
-                    } else if (extension === 'md' || extension === 'markdown' || looksLikeMarkdown(content)) {
-                        renderMarkdown(content);
-                    } else if (extension === 'pdf') {
-                        showError('PDF support coming soon! Please use JSON or Markdown files for now.');
-                    } else {
-                        // Default to markdown if format is unclear
-                        renderMarkdown(content);
-                    }
-                } catch (error) {
-                    showError('Error processing file: ' + error.message);
-                }
-            };
-            
-            reader.readAsText(file);
-        }
-
-        function isJSON(str) {
-            try {
-                JSON.parse(str);
-                return true;
-            } catch (e) {
-                return false;
-            }
-        }
-
-        function looksLikeMarkdown(content) {
-            // Simple heuristic to detect markdown-like content
-            const markdownPatterns = [
-                /^#\s/m,           // Headers
-                /\*\*(.*?)\*\*/,   // Bold text
-                /\[(.*?)\]\((.*?)\)/, // Links
-                /```/,             // Code blocks
-                /^\s*[-*+]\s/m     // Lists
-            ];
-            return markdownPatterns.some(pattern => pattern.test(content));
-        }
-
-        function showLoading() {
-            contentDisplay.innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Processing your document...</p>
-                </div>
-            `;
-        }
-
-        function showError(message) {
-            contentDisplay.innerHTML = `
-                <div class="error">
-                    <strong>Error:</strong> ${message}
-                </div>
-            `;
-        }
-
-        function renderJSON(data) {
-            let html = '<div class="paper-content">';
-            
-            // Add metadata if available
-            if (data.metadata) {
-                html += `
-                    <div class="metadata">
-                        <strong>Document Info</strong><br>
-                        ${Object.entries(data.metadata).map(([key, value]) => 
-                            `${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}: ${value}`
-                        ).join('<br>')}
-                    </div>
-                `;
-            }
-            
-            // Process chunks
-            if (data.chunks && Array.isArray(data.chunks)) {
-                data.chunks.forEach((chunk, index) => {
-                    html += processContent(chunk);
-                });
-            } else {
-                html += '<p>No content found in document.</p>';
-            }
-            
-            html += '</div>';
-            contentDisplay.innerHTML = html;
-            renderMath();
-        }
-
-        function renderMarkdown(content) {
-            const processedContent = processContent(content);
-            const html = `<div class="paper-content">${processedContent}</div>`;
-            contentDisplay.innerHTML = html;
-            renderMath();
-        }
-
-        function processContent(content) {
-            if (!content) return '';
-            
-            // First escape any existing HTML to prevent it from being treated as text
-            content = content.replace(/&/g, '&amp;')
-                           .replace(/</g, '&lt;')
-                           .replace(/>/g, '&gt;');
-
-            // Process custom image format
-            content = content.replace(/\[IMAGE:\s*([^\]]+)\]/g, (match, imageName) => {
-                return createImageHTML(imageName);
-            });
-            
-            // Convert markdown to HTML with custom renderer
-            const renderer = new marked.Renderer();
-            
-            // Custom image renderer
-            renderer.image = (href, title, text) => {
-                return createImageHTML(href, text);
-            };
-            
-            marked.setOptions({
-                renderer: renderer,
-                gfm: true,
-                breaks: true,
-                smartLists: true,
-                smartypants: true
-            });
-            
-            // Process block equations
-            content = content.replace(/\$\$([\s\S]+?)\$\$/g, (match, equation) => {
-                return `<div class="equation" data-equation="${equation.trim()}"></div>`;
-            });
-            
-            // Process inline equations
-            content = content.replace(/\$([^$]+)\$/g, (match, equation) => {
-                return `<span class="inline-equation" data-equation="${equation.trim()}"></span>`;
-            });
-            
-            try {
-                return marked.parse(content);
-            } catch (error) {
-                console.error('Markdown parsing error:', error);
-                return content
-                    .replace(/\n\n/g, '</p><p>')
-                    .replace(/\n/g, '<br>')
-                    .replace(/^\s*/, '<p>')
-                    .replace(/\s*$/, '</p>');
-            }
-        }
-
-        function createImageHTML(src, alt = '') {
-            // Clean up the source path
-            src = src.trim();
-            if (!src.startsWith('http') && !src.startsWith('data:')) {
-                // Remove any 'output/images/' prefix if it exists
-                src = src.replace(/^(?:output\/images\/)?/, '');
-                // Add the correct prefix
-                src = `output/images/${src}`;
-            }
-            
-            return `<div class="image-container">
-                <img src="${src}" 
-                     alt="${alt || src}" 
-                     loading="lazy"
-                     onclick="showImageModal('${src}')"
-                />
-            </div>`;
-        }
-
-        function renderMath() {
-            document.querySelectorAll('[data-equation]').forEach(element => {
-                const equation = element.getAttribute('data-equation');
-                const isBlock = element.classList.contains('equation');
-                
-                try {
-                    katex.render(equation, element, {
-                        displayMode: isBlock,
-                        throwOnError: false,
-                        trust: true
-                    });
-                } catch (error) {
-                    console.error('KaTeX rendering error:', error);
-                    element.innerHTML = `<span class="error">Error rendering equation: ${equation}</span>`;
-                }
-            });
-        }
-
-        // Sample data
-        const sampleJSON = {
-            "metadata": {
-                "title": "Understanding Deep Learning in Modern Context",
-                "authors": "John Doe, Jane Smith",
-                "date": "2024-03-15",
-                "keywords": "deep learning, AI, neural networks"
-            },
-            "chunks": [
-                "# Understanding Deep Learning\n\nThis research explores the fundamental concepts of deep learning and its applications in modern context. We present a comprehensive analysis of neural network architectures and their impact on various domains.",
-                
-                "## Key Concepts\n\nThe basic neural network architecture can be represented by the following equation:\n\n$$h(x) = \\sigma(Wx + b)$$\n\nwhere $\\sigma$ represents the activation function, $W$ is the weight matrix, and $b$ is the bias vector.",
-                
-                "## Results\n\nOur experiments show significant improvements in model performance:\n\n| Model | Accuracy | F1-Score |\n|-------|----------|----------|\n| CNN   | 95.5%    | 0.94     |\n| LSTM  | 97.2%    | 0.96     |",
-                
-                "[IMAGE: neural_network.png]\n\nFigure 1: Architecture of our proposed neural network model."
-            ]
-        };
-
-        function loadSampleJSON() {
-            showLoading();
-            setTimeout(() => {
-                renderJSON(sampleJSON);
-            }, 500);
-        }
-
-        function showImageModal(src) {
-            const modal = document.createElement('div');
-            modal.style.position = 'fixed';
-            modal.style.top = 0;
-            modal.style.left = 0;
-            modal.style.width = '100vw';
-            modal.style.height = '100vh';
-            modal.style.background = 'rgba(0,0,0,0.9)';
-            modal.style.display = 'flex';
-            modal.style.alignItems = 'center';
-            modal.style.justifyContent = 'center';
-            modal.style.zIndex = 10000;
-            modal.style.cursor = 'zoom-out';
-            
-            const img = document.createElement('img');
-            img.src = src;
-            img.style.maxWidth = '90vw';
-            img.style.maxHeight = '90vh';
-            img.style.objectFit = 'contain';
-            img.style.borderRadius = '0.5rem';
-            img.style.boxShadow = '0 4px 32px rgba(0,0,0,0.3)';
-            img.style.transition = 'transform 0.3s ease';
-            
-            modal.appendChild(img);
-            modal.onclick = () => document.body.removeChild(modal);
-            document.body.appendChild(modal);
-        }
+        // Use the same host as the current page
+        const API_URL = '';  // Empty string means same host
+        let currentPaper = null;
+        let currentVersion = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('PaperPal loaded successfully');
+            refreshPapersList();
+            setupUploadHandlers();
         });
 
-        async function refreshFileList() {
-            const fileList = document.getElementById('fileList');
-            fileList.innerHTML = '<div class="loading">Loading files...</div>';
-            
+        async function refreshPapersList() {
             try {
-                const response = await fetch('/api/list-files');
-                if (!response.ok) throw new Error('Failed to fetch file list');
+                const response = await fetch(`${API_URL}/api/papers`);
+                if (!response.ok) throw new Error('Failed to fetch papers');
                 
-                const files = await response.json();
+                const papers = await response.json();
                 
-                if (files.length === 0) {
-                    fileList.innerHTML = '<div class="file-item">No files found in output directory</div>';
-                    return;
-                }
-                
-                fileList.innerHTML = files.map(file => `
-                    <div class="file-item" onclick="loadFile('${file.path}')">
-                        <div class="file-item-name">
-                            <span>${getFileIcon(file.type)}</span>
-                            ${file.name}
+                const papersList = document.getElementById('papersList');
+                papersList.innerHTML = papers.map(paper => `
+                    <div class="paper-item" data-paper-id="${paper.paper_id}">
+                        <div class="paper-header">
+                            <div class="paper-title">${paper.original_filename}</div>
                         </div>
-                        <div class="file-item-info">
-                            ${formatFileSize(file.size)} • ${formatDate(file.modified)}
-                        </div>
-                        <div class="file-item-actions">
-                            <button onclick="event.stopPropagation(); viewRawFile('${file.path}')">View Raw</button>
-                            <button onclick="event.stopPropagation(); deleteFile('${file.path}')" class="delete-btn">Delete</button>
+                        <div class="paper-versions">
+                            ${Object.entries(paper.versions).map(([grade, _]) => `
+                                <button class="version-btn" 
+                                        onclick="loadPaperVersion('${paper.paper_id}', '${grade}')"
+                                        data-grade="${grade}">
+                                    ${formatGradeLevel(grade)}
+                                </button>
+                            `).join('')}
                         </div>
                     </div>
                 `).join('');
             } catch (error) {
-                fileList.innerHTML = `<div class="error">Error loading files: ${error.message}</div>`;
+                console.error('Error loading papers:', error);
+                const papersList = document.getElementById('papersList');
+                papersList.innerHTML = '<div class="error">Error loading papers. Please try again.</div>';
             }
         }
 
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        function formatGradeLevel(grade) {
+            const formats = {
+                'grade4': '4th Grade',
+                'grade8': '8th Grade',
+                'grade12': '12th Grade',
+                'undergraduate': 'Undergraduate',
+                'phd': 'PhD Level'
+            };
+            return formats[grade] || grade;
         }
 
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-        }
-
-        async function loadFile(path) {
-            showLoading();
+        async function loadPaperVersion(paperId, grade) {
             try {
-                const response = await fetch(`/api/file/${path}`);
-                if (!response.ok) throw new Error('Failed to load file');
-                
-                const content = await response.text();
-                if (path.endsWith('.json')) {
-                    renderJSON(JSON.parse(content));
-                } else if (path.endsWith('.md')) {
-                    renderMarkdown(content);
+                // Update active states
+                document.querySelectorAll('.version-btn').forEach(btn => btn.classList.remove('active'));
+                const activeBtn = document.querySelector(`[data-paper-id="${paperId}"] [data-grade="${grade}"]`);
+                if (activeBtn) {
+                    activeBtn.classList.add('active');
                 }
-            } catch (error) {
-                showError(`Error loading file: ${error.message}`);
-            }
-        }
 
-        async function viewRawFile(path) {
-            try {
-                const response = await fetch(`/api/file/${path}`);
-                if (!response.ok) throw new Error('Failed to load file');
+                // Show loading state
+                const contentDisplay = document.getElementById('contentDisplay');
+                contentDisplay.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading paper version...</p></div>';
+
+                // Load content
+                const response = await fetch(`${API_URL}/api/paper/${paperId}/${grade}`);
+                const data = await response.json();
                 
-                const content = await response.text();
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to load paper version');
+                }
+                
                 contentDisplay.innerHTML = `
                     <div class="paper-content">
-                        <pre style="background:#f8fafc;padding:1rem;border-radius:0.5rem;overflow-x:auto;font-family:monospace;">
-                            <code>${escapeHtml(content)}</code>
-                        </pre>
+                        <h2>${formatGradeLevel(grade)} Version</h2>
+                        ${marked.parse(data.chunks.join('\n\n'))}
                     </div>
                 `;
+
+                currentPaper = paperId;
+                currentVersion = grade;
             } catch (error) {
-                showError(`Error loading raw file: ${error.message}`);
+                console.error('Error loading paper version:', error);
+                const contentDisplay = document.getElementById('contentDisplay');
+                contentDisplay.innerHTML = `
+                    <div class="error">
+                        <strong>Error loading paper version:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
             }
         }
 
-        async function deleteFile(path) {
-            if (!confirm('Are you sure you want to delete this file?')) return;
-            
+        function setupUploadHandlers() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const uploadProgress = document.getElementById('uploadProgress');
+
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+            uploadArea.addEventListener('drop', handleFileDrop);
+            fileInput.addEventListener('change', handleFileSelect);
+        }
+
+        async function handleFileDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) await uploadFile(files[0]);
+        }
+
+        async function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) await uploadFile(files[0]);
+        }
+
+        async function uploadFile(file) {
+            if (!file.name.endsWith('.pdf')) {
+                alert('Please upload a PDF file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Show upload progress
+            const uploadArea = document.getElementById('uploadArea');
+            const uploadProgress = document.getElementById('uploadProgress');
+            uploadArea.style.display = 'none';
+            uploadProgress.style.display = 'block';
+
             try {
-                const response = await fetch(`/api/file/${path}`, { method: 'DELETE' });
-                if (!response.ok) throw new Error('Failed to delete file');
+                const response = await fetch(`${API_URL}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
                 
-                refreshFileList();
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Upload failed');
+                }
+
+                console.log('Upload successful:', result);
+
+                // Refresh the papers list and hide progress
+                await refreshPapersList();
+                uploadArea.style.display = 'block';
+                uploadProgress.style.display = 'none';
+
+                // Load the first version of the uploaded paper
+                if (result.versions && Object.keys(result.versions).length > 0) {
+                    const firstGrade = Object.keys(result.versions)[0];
+                    await loadPaperVersion(result.paper_id, firstGrade);
+                }
+
             } catch (error) {
-                showError(`Error deleting file: ${error.message}`);
+                console.error('Upload error:', error);
+                alert('Error uploading file: ' + error.message);
+                uploadArea.style.display = 'block';
+                uploadProgress.style.display = 'none';
             }
         }
     </script>

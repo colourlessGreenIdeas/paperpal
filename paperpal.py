@@ -507,10 +507,10 @@ async def main():
     parser.add_argument('-o', '--output-dir', default='output', help='Output directory')
     parser.add_argument('-g', '--grade-levels', nargs='+',
                         choices=list(GRADE_LEVEL_DESCRIPTIONS.keys()),
-                        default=['original', 'grade8', 'undergraduate'],
+                        default=['grade4', 'grade8', 'grade12', 'undergraduate', 'phd'],
                         help='Target grade levels')
     parser.add_argument('-p', '--provider', choices=['openai', 'gemini', 'azure', 'hf'],
-                        default='openai', help='AI provider to use')
+                        default='gemini', help='AI provider to use')
     parser.add_argument('--hf-model', default='google/flan-t5-large',
                         help='Hugging Face model name if provider is hf')
     parser.add_argument('--rate-limit', type=int, default=50,
