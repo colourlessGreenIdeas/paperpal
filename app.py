@@ -28,6 +28,7 @@ UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "output"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, "images"), exist_ok=True)
 
 # Initialize PaperPal
 rate_limiter = AsyncRateLimiter(rate_limit=50, per_seconds=60)
@@ -36,6 +37,9 @@ model = GeminiModel(rate_limiter)
 paper_pal = Paperpal(model, cache_manager, temp=0.3)
 
 GRADE_LEVELS = ["grade4", "grade8", "grade12", "undergraduate", "phd"]
+
+# Mount the output/images directory
+app.mount("/images", StaticFiles(directory=os.path.join(OUTPUT_DIR, "images")), name="images")
 
 # API routes
 @app.post("/api/upload")

@@ -301,6 +301,21 @@
         .paper-content {
             max-width: 800px;
             margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .paper-content img {
+            max-width: 100%;
+            height: auto;
+            margin: 1rem 0;
+            border-radius: 0.5rem;
+            box-shadow: var(--shadow-md);
+            transition: transform 0.2s ease;
+        }
+
+        .paper-content img:hover {
+            transform: scale(1.02);
+            cursor: zoom-in;
         }
 
         .paper-content h1 {
@@ -355,23 +370,25 @@
             text-align: center;
         }
 
-        .image-container img {
-            max-width: 100%;
-            border-radius: 0.75rem;
-            box-shadow: var(--shadow-md);
-            transition: transform 0.3s ease;
-        }
-
-        .image-container img:hover {
-            transform: scale(1.02);
-        }
-
         .equation {
-            margin: 2rem 0;
-            padding: 1.5rem;
+            display: block;
+            margin: 1em 0;
+            padding: 1em;
             background: #f8fafc;
-            border-radius: 0.75rem;
-            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            text-align: center;
+        }
+
+        .math-inline {
+            padding: 0 0.2em;
+            background: rgba(27, 31, 35, 0.05);
+            border-radius: 3px;
+        }
+
+        .katex-display {
+            margin: 0 !important;
+            padding: 0.5rem 0;
         }
 
         .error {
@@ -418,16 +435,16 @@
         </div>
 
         <div class="upload-container">
-            <div class="upload-area" id="uploadArea">
+        <div class="upload-area" id="uploadArea">
                 <h3>Drop your PDF here</h3>
                 <p>or click to select a file</p>
                 <input type="file" id="fileInput" class="file-input" accept=".pdf" style="display: none;">
-            </div>
+        </div>
 
             <div id="uploadProgress" style="display: none;">
                 <div class="spinner"></div>
                 <p>Processing your paper... This may take a few minutes.</p>
-            </div>
+        </div>
 
             <div class="content-area" id="contentDisplay">
                 <!-- Paper content will be displayed here -->
@@ -489,6 +506,35 @@
             return formats[grade] || grade;
         }
 
+        function renderKaTeX(tex, displayMode) {
+            try {
+                tex = tex.trim();
+                tex = tex.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+                if (tex.startsWith('\\begin{align') || tex.startsWith('\\begin{equation') || 
+                    tex.startsWith('\\begin{gather}') || tex.startsWith('\\begin{cases}')) {
+                    displayMode = true;
+                }
+                const rendered = katex.renderToString(tex, {
+                    displayMode: displayMode,
+                    throwOnError: false,
+                    trust: true,
+                    strict: false,
+                    macros: { 
+                        "\\cases": "\\begin{cases}#1\\end{cases}", 
+                        "\\text": "\\textrm{#1}" 
+                    }
+                });
+                return displayMode ? 
+                    `<div class="equation">${rendered}</div>` : 
+                    `<span class="math-inline">${rendered}</span>`;
+            } catch (error) {
+                console.error('KaTeX error:', error);
+                return displayMode ? 
+                    `<div class="equation text-red-500">Error rendering: ${tex}</div>` : 
+                    `<span class="math-inline text-red-500">Error rendering: ${tex}</span>`;
+            }
+        }
+
         async function loadPaperVersion(paperId, grade) {
             try {
                 // Update active states
@@ -509,13 +555,56 @@
                 if (!response.ok) {
                     throw new Error(data.detail || 'Failed to load paper version');
                 }
+
+                // Process content to handle image paths and equations
+                let content = data.chunks.join('\n\n');
                 
+                // Replace image tags with proper markdown
+                content = content.replace(/\[IMAGE:\s*([^\]]+)\]/g, (match, imageName) => {
+                    return `![${imageName}](/images/${imageName})`;
+                });
+
+                // Process equations before markdown
+                const mathExpressions = [];
+                const mathPlaceholder = "MATH_EXPRESSION_PLACEHOLDER_";
+                
+                // Handle display math ($$...$$)
+                let processedContent = content.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
+                    const index = mathExpressions.length;
+                    mathExpressions.push({tex: tex.trim(), display: true});
+                    return `\n\n${mathPlaceholder}${index}\n\n`;
+                });
+
+                // Handle inline math ($...$)
+                processedContent = processedContent.replace(/(^|[^\\])\$([^$\n]+?)\$/g, (match, prefix, tex) => {
+                    const index = mathExpressions.length;
+                    mathExpressions.push({tex: tex.trim(), display: false});
+                    return `${prefix}${mathPlaceholder}${index}`;
+                });
+
+                // Convert to HTML with marked
+                let htmlContent = marked.parse(processedContent);
+
+                // Replace math placeholders with rendered equations
+                htmlContent = htmlContent.replace(new RegExp(mathPlaceholder + "(\\d+)", "g"), (match, index) => {
+                    const expr = mathExpressions[parseInt(index)];
+                    return renderKaTeX(expr.tex, expr.display);
+                });
+
+                // Render the content
                 contentDisplay.innerHTML = `
                     <div class="paper-content">
                         <h2>${formatGradeLevel(grade)} Version</h2>
-                        ${marked.parse(data.chunks.join('\n\n'))}
+                        ${htmlContent}
                     </div>
                 `;
+
+                // Add click handlers for images
+                document.querySelectorAll('.paper-content img').forEach(img => {
+                    img.addEventListener('click', () => {
+                        showImageModal(img.src);
+                    });
+                });
 
                 currentPaper = paperId;
                 currentVersion = grade;
@@ -529,6 +618,33 @@
                     </div>
                 `;
             }
+        }
+
+        function showImageModal(src) {
+            const modal = document.createElement('div');
+            modal.style.position = 'fixed';
+            modal.style.top = 0;
+            modal.style.left = 0;
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.9)';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = 10000;
+            modal.style.cursor = 'zoom-out';
+            
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.maxWidth = '90vw';
+            img.style.maxHeight = '90vh';
+            img.style.objectFit = 'contain';
+            img.style.borderRadius = '0.5rem';
+            img.style.boxShadow = '0 4px 32px rgba(0,0,0,0.3)';
+            
+            modal.appendChild(img);
+            modal.onclick = () => document.body.removeChild(modal);
+            document.body.appendChild(modal);
         }
 
         function setupUploadHandlers() {
