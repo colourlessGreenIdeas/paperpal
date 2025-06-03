@@ -5,8 +5,9 @@
 *.pdf
 *.json
 *.md
-output/*.html
+output/
 geminioutput/
+node_modules/
 
 
 # Byte-compiled / optimized / DLL files

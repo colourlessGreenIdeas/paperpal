@@ -15,10 +15,11 @@ A Python-based tool that simplifies research papers while preserving key insight
 - Supports multiple AI providers: OpenAI, Azure OpenAI, and Google Gemini
 
 ### Output Formats
+- **App**: Easy interface to paperpal. Just upload and read!
 - **Markdown**: Clean, readable format with LaTeX equation support
 - **JSON**: Structured data format for further processing
 - **HTML Comparison View**: Side-by-side comparison of different simplified versions using the included `compare.html` viewer
-- **PDF**: to convert the markdown file into pdf, run the `md_to_pdf.py` script
+- **PDF**: (*Optional*) to convert the markdown file into pdf, run the `md_to_pdf.py` script
 
 ## Prerequisites
 
@@ -26,9 +27,9 @@ A Python-based tool that simplifies research papers while preserving key insight
 
 #### Ubuntu/Debian
 ```bash
-    python3.10 
-    wkhtmltopdf
-    poppler-utils
+python3.10 
+wkhtmltopdf
+poppler-utils
 ```
 Install wkhtmltopdf and poppler-utils like so:
 
@@ -110,7 +111,7 @@ The project uses several Python packages:
 - `weasyprint`: Alternative PDF generation (v52.5)
 - `Jinja2`: HTML templating (v3.0.3)
 
-## OpenAI Requirements:
+### OpenAI Requirements:
 - Open AI Key
 - Open AI Model name
 - Open AI Embedding Model name
@@ -157,7 +158,22 @@ Create a `.env` file. Copy the `.example.env` files contents to `.env` and edit 
 ## Usage
 To avoid code repetition, Windows code version is used below. If you are on Mac or Linux, use `python3` instead of `python`
 
-### Basic Usage
+### To use the app:
+
+```
+uvicorn app:app --reload
+```
+
+Go to 
+```
+http://localhost:8000/paperpal.html
+```
+
+
+### Basic Terminal Usage
+
+You can use paperpal without the app:
+
 ```bash
 python paperpal.py input.pdf
 ```
@@ -335,11 +351,11 @@ Contributions are welcome! Feel free to:
 ## Roadmap
 
 - [ ] Performance improvements
-  - Implement async/await for parallel processing
+  - ✅ Implement async/await for parallel processing
   - Add batch processing capabilities
   - Optimize the code
   - Add a recursive summary
-  - Add image and figure support
+  - ✅ Add image and figure support
 
 - [x] Additional Model Providers
   - Add Anthropic Claude support
@@ -348,7 +364,7 @@ Contributions are welcome! Feel free to:
   - Support custom model deployments
 
 - [ ] Web Application
-  - Develop web interface
+  - ✅ Develop web interface
   - Add user authentication
-  - Real-time processing status
+  - ✅ Real-time processing status
   - Collaborative features

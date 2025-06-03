@@ -137,237 +137,166 @@
         .text-red-500 {
             color: #f85149;
         }
+        .modal-bg { background: rgba(0,0,0,0.7); }
+        .modal-img { max-width: 90vw; max-height: 90vh; border-radius: 1rem; box-shadow: 0 4px 32px rgba(0,0,0,0.3); }
     </style>
 </head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">PaperPal Comparison Viewer</h1>
-            <div class="flex gap-4">
-                <div class="flex-1">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Original Version</label>
-                    <input type="file" id="file1" accept=".json" 
-                           class="block w-full text-sm text-gray-500
-                                  file:mr-4 file:py-2 file:px-4
-                                  file:rounded-md file:border-0
-                                  file:text-sm file:font-semibold
-                                  file:bg-blue-50 file:text-blue-700
-                                  hover:file:bg-blue-100">
-                </div>
-                <div class="flex-1">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Simplified Version</label>
-                    <input type="file" id="file2" accept=".json" 
-                           class="block w-full text-sm text-gray-500
-                                  file:mr-4 file:py-2 file:px-4
-                                  file:rounded-md file:border-0
-                                  file:text-sm file:font-semibold
-                                  file:bg-blue-50 file:text-blue-700
-                                  hover:file:bg-blue-100">
-                </div>
-            </div>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <!-- Sticky Header -->
+    <header class="sticky top-0 z-30 bg-white/90 dark:bg-gray-800/90 shadow-sm py-3 px-6 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <span class="text-2xl font-bold text-blue-700 dark:text-blue-300">PaperPal</span>
+            <span class="text-lg font-semibold text-gray-600 dark:text-gray-300">Comparison Viewer</span>
         </div>
-
-        <!-- Content Area -->
-        <div class="flex gap-4">
-            <!-- Left Panel -->
-            <div class="flex-1 bg-white rounded-lg shadow-lg p-6">
-                <div class="mb-2">
-                    <h2 id="leftTitle" class="text-xl font-semibold text-gray-800">Original Version</h2>
-                    <p id="leftMetadata" class="text-sm text-gray-500"></p>
-                </div>
-                <div id="leftPanel" class="content-panel overflow-y-auto prose prose-sm max-w-none">
-                    <p class="text-gray-500 italic">Please load a file...</p>
-                </div>
-            </div>
-
-            <!-- Right Panel -->
-            <div class="flex-1 bg-white rounded-lg shadow-lg p-6">
-                <div class="mb-2">
-                    <h2 id="rightTitle" class="text-xl font-semibold text-gray-800">Simplified Version</h2>
-                    <p id="rightMetadata" class="text-sm text-gray-500"></p>
-                </div>
-                <div id="rightPanel" class="content-panel overflow-y-auto prose prose-sm max-w-none">
-                    <p class="text-gray-500 italic">Please load a file...</p>
-                </div>
-            </div>
+        <div class="flex items-center gap-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">Original <input type="file" id="file1" accept=".json" class="ml-2" /></label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">Simplified <input type="file" id="file2" accept=".json" class="ml-2" /></label>
+            <button id="themeToggle" class="ml-4 px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-blue-100 dark:hover:bg-blue-600 transition">🌙</button>
+            <button class="ml-2 px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition" disabled>Export</button>
         </div>
+    </header>
+    <main class="flex flex-col md:flex-row gap-4 px-2 md:px-8 py-4">
+        <!-- Chunk Navigation Sidebar -->
+        <aside class="hidden md:block w-24 pt-4">
+            <div id="chunkNav" class="flex flex-col gap-2 sticky top-24"></div>
+        </aside>
+        <!-- Comparison Panels -->
+        <section class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Original Panel -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-col">
+                <h2 class="text-xl font-semibold text-blue-700 dark:text-blue-300 mb-2">Original</h2>
+                <div id="leftPanel" class="flex-1 overflow-y-auto space-y-4"></div>
+            </div>
+            <!-- Simplified Panel -->
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-col">
+                <h2 class="text-xl font-semibold text-blue-700 dark:text-blue-300 mb-2">Simplified</h2>
+                <div id="rightPanel" class="flex-1 overflow-y-auto space-y-4"></div>
+            </div>
+        </section>
+    </main>
+    <!-- Modal for image enlarge -->
+    <div id="imgModal" class="hidden fixed inset-0 flex items-center justify-center modal-bg z-50">
+        <img id="modalImg" src="" class="modal-img" />
     </div>
-
     <script>
-        // Configure marked options to match VS Code's behavior
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-            headerIds: false,
-            mangle: false,
-            pedantic: false,
-            smartLists: true,
-            smartypants: true,
-            xhtml: true
-        });
+    // --- Theme Toggle ---
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.onclick = () => {
+        document.body.classList.toggle('dark');
+        themeToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+    };
 
-        // Synchronize scrolling between panels
-        const leftPanel = document.getElementById('leftPanel');
-        const rightPanel = document.getElementById('rightPanel');
-        
-        leftPanel.addEventListener('scroll', () => {
-            rightPanel.scrollTop = leftPanel.scrollTop;
+    // --- Math/Markdown/Image Rendering ---
+    function renderKaTeX(tex, displayMode) {
+        try {
+            tex = tex.trim();
+            tex = tex.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+            if (tex.startsWith('\\begin{align') || tex.startsWith('\\begin{equation') || tex.startsWith('\\begin{gather}') || tex.startsWith('\\begin{cases}')) displayMode = true;
+            const rendered = katex.renderToString(tex, {
+                displayMode: displayMode,
+                throwOnError: false,
+                trust: true,
+                strict: false,
+                macros: { "\\cases": "\\begin{cases}#1\\end{cases}", "\\text": "\\textrm{#1}" }
+            });
+            return displayMode ? `<div class="math-display">${rendered}</div>` : `<span class="math-inline">${rendered}</span>`;
+        } catch (error) {
+            return displayMode ? `<div class="math-display text-red-500">Error rendering: ${tex}</div>` : `<span class="math-inline text-red-500">Error rendering: ${tex}</span>`;
+        }
+    }
+    function processContent(content) {
+        content = content.replace(/\r\n/g, '\n').trim();
+        // Render images: Replace [IMAGE: ...] with <img ...>
+        content = content.replace(/\[IMAGE:\s*(.*?)\s*\]/g, function(_, filename) {
+            return `<img src="output/images/${filename.trim()}" class="rounded shadow cursor-pointer hover:scale-105 transition" style="max-width:100%;margin:1em 0;" onclick=\"showModal('output/images/${filename.trim()}')\" />`;
         });
-        
-        rightPanel.addEventListener('scroll', () => {
-            leftPanel.scrollTop = rightPanel.scrollTop;
+        // Math
+        const mathExpressions = [];
+        const mathPlaceholder = "MATH_EXPRESSION_PLACEHOLDER_";
+        let processedContent = content;
+        processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
+            const index = mathExpressions.length;
+            mathExpressions.push({tex: tex.trim(), display: true});
+            return `\n\n${mathPlaceholder}${index}\n\n`;
         });
-
-        // Function to render math expressions with KaTeX
-        function renderKaTeX(tex, displayMode) {
+        processedContent = processedContent.replace(/(^|[^\\])\$([^$\n]+?)\$/g, (match, prefix, tex) => {
+            const index = mathExpressions.length;
+            mathExpressions.push({tex: tex.trim(), display: false});
+            return `${prefix}${mathPlaceholder}${index}`;
+        });
+        let htmlContent = marked.parse(processedContent);
+        htmlContent = htmlContent.replace(new RegExp(mathPlaceholder + "(\\d+)", "g"), (match, index) => {
+            const expr = mathExpressions[parseInt(index)];
+            return renderKaTeX(expr.tex, expr.display);
+        });
+        return htmlContent;
+    }
+    // --- Modal for image enlarge ---
+    function showModal(src) {
+        const modal = document.getElementById('imgModal');
+        const modalImg = document.getElementById('modalImg');
+        modalImg.src = src;
+        modal.classList.remove('hidden');
+        modal.onclick = () => { modal.classList.add('hidden'); modalImg.src = ''; };
+    }
+    // --- Chunk Navigation ---
+    let leftChunks = [], rightChunks = [];
+    function renderChunks(panelId, chunks, nav = false) {
+        const panel = document.getElementById(panelId);
+        panel.innerHTML = '';
+        chunks.forEach((chunk, idx) => {
+            const div = document.createElement('div');
+            div.className = 'bg-gray-50 dark:bg-gray-700 rounded-lg shadow p-4 mb-2 transition hover:ring-2 hover:ring-blue-400';
+            div.id = `${panelId}-chunk-${idx}`;
+            div.innerHTML = `<div class="text-xs font-medium text-gray-500 mb-2">Chunk ${idx + 1}</div><div class="text-gray-800 dark:text-gray-100">${processContent(chunk)}</div>`;
+            panel.appendChild(div);
+        });
+        if (nav) {
+            // Render chunk nav
+            const navPanel = document.getElementById('chunkNav');
+            navPanel.innerHTML = '';
+            chunks.forEach((_, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'w-10 h-10 mb-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 font-bold hover:bg-blue-300 dark:hover:bg-blue-700 transition';
+                btn.textContent = idx + 1;
+                btn.onclick = () => {
+                    document.getElementById(`leftPanel-chunk-${idx}`).scrollIntoView({behavior:'smooth', block:'center'});
+                    document.getElementById(`rightPanel-chunk-${idx}`).scrollIntoView({behavior:'smooth', block:'center'});
+                };
+                navPanel.appendChild(btn);
+            });
+        }
+    }
+    // --- File Loading ---
+    function handleFileLoad(file, panelId, titleId, metadataId, isLeft) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
             try {
-                // Clean up LaTeX input
-                tex = tex.trim();
-                
-                // Handle HTML entities
-                tex = tex.replace(/&amp;/g, '&')
-                         .replace(/&lt;/g, '<')
-                         .replace(/&gt;/g, '>');
-                
-                // Detect equation environments
-                if (tex.startsWith('\\begin{align') || tex.startsWith('\\begin{equation') || 
-                    tex.startsWith('\\begin{gather}') || tex.startsWith('\\begin{cases}')) {
-                    displayMode = true;
-                }
-                
-                // Special handling for equations with explanations
-                if (displayMode && tex.includes('\\text{where }') && tex.includes('*')) {
-                    const parts = tex.split('\\text{where }');
-                    const equation = parts[0].trim();
-                    const explanation = parts[1].trim();
-                    
-                    const renderedEquation = katex.renderToString(equation, {
-                        displayMode: true,
-                        throwOnError: false,
-                        trust: true,
-                        strict: false,
-                        macros: {
-                            "\\cases": "\\begin{cases}#1\\end{cases}",
-                            "\\text": "\\textrm{#1}"
-                        }
-                    });
-                    
-                    const explanationHtml = marked.parse(`**Where:**\n${explanation}`);
-                    
-                    return `<div class="math-display">${renderedEquation}</div>${explanationHtml}`;
-                }
-                
-                // Normal equation rendering
-                const rendered = katex.renderToString(tex, {
-                    displayMode: displayMode,
-                    throwOnError: false,
-                    trust: true,
-                    strict: false,
-                    macros: {
-                        "\\cases": "\\begin{cases}#1\\end{cases}",
-                        "\\text": "\\textrm{#1}"
-                    }
-                });
-                
-                return displayMode 
-                    ? `<div class="math-display">${rendered}</div>`
-                    : `<span class="math-inline">${rendered}</span>`;
+                const data = JSON.parse(e.target.result);
+                const panel = document.getElementById(panelId);
+                const titleElem = document.getElementById(titleId);
+                const metadataElem = document.getElementById(metadataId);
+                titleElem.textContent = `${data.metadata.grade_level} Version`;
+                metadataElem.textContent = `Generated: ${data.metadata.generated_at} • Total Chunks: ${data.metadata.total_chunks}`;
+                if (isLeft) leftChunks = data.chunks; else rightChunks = data.chunks;
+                renderChunks(panelId, data.chunks, isLeft);
             } catch (error) {
-                console.error('KaTeX error:', error);
-                return displayMode 
-                    ? `<div class="math-display text-red-500">Error rendering: ${tex}</div>`
-                    : `<span class="math-inline text-red-500">Error rendering: ${tex}</span>`;
+                console.error('Error parsing JSON:', error);
+                panel.innerHTML = '<p class="text-red-500">Error loading file. Please ensure it\'s a valid JSON file.</p>';
             }
+        };
+        reader.readAsText(file);
+    }
+    document.getElementById('file1').addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            handleFileLoad(e.target.files[0], 'leftPanel', 'leftTitle', 'leftMetadata', true);
         }
-
-        // Function to process content
-        function processContent(content) {
-            // Normalize line endings and clean up content
-            content = content.replace(/\r\n/g, '\n').trim();
-            
-            // Store math expressions to protect them from markdown processing
-            const mathExpressions = [];
-            const mathPlaceholder = "MATH_EXPRESSION_PLACEHOLDER_";
-            let processedContent = content;
-            
-            // Replace display math expressions ($$...$$)
-            processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
-                const index = mathExpressions.length;
-                mathExpressions.push({tex: tex.trim(), display: true});
-                return `\n\n${mathPlaceholder}${index}\n\n`;
-            });
-            
-            // Replace inline math expressions ($...$)
-            processedContent = processedContent.replace(/(^|[^\\])\$([^$\n]+?)\$/g, (match, prefix, tex) => {
-                const index = mathExpressions.length;
-                mathExpressions.push({tex: tex.trim(), display: false});
-                return `${prefix}${mathPlaceholder}${index}`;
-            });
-            
-            // Process markdown
-            let htmlContent = marked.parse(processedContent);
-            
-            // Restore math expressions with rendered KaTeX
-            htmlContent = htmlContent.replace(new RegExp(mathPlaceholder + "(\\d+)", "g"), (match, index) => {
-                const expr = mathExpressions[parseInt(index)];
-                return renderKaTeX(expr.tex, expr.display);
-            });
-            
-            return htmlContent;
+    });
+    document.getElementById('file2').addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            handleFileLoad(e.target.files[0], 'rightPanel', 'rightTitle', 'rightMetadata', false);
         }
-
-        // Handle file loading
-        function handleFileLoad(file, panelId, titleId, metadataId) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    const panel = document.getElementById(panelId);
-                    const titleElem = document.getElementById(titleId);
-                    const metadataElem = document.getElementById(metadataId);
-                    
-                    // Update metadata
-                    titleElem.textContent = `${data.metadata.grade_level} Version`;
-                    metadataElem.textContent = `Generated: ${data.metadata.generated_at} • Total Chunks: ${data.metadata.total_chunks}`;
-                    
-                    // Clear existing content
-                    panel.innerHTML = '';
-                    
-                    // Add chunks
-                    data.chunks.forEach((chunk, index) => {
-                        const div = document.createElement('div');
-                        div.className = 'mb-6 p-4 bg-gray-50 rounded-lg';
-                        
-                        // Process the content
-                        const processedContent = processContent(chunk);
-                        
-                        div.innerHTML = `
-                            <div class="text-xs font-medium text-gray-500 mb-2">Chunk ${index + 1}</div>
-                            <div class="text-gray-800">${processedContent}</div>
-                        `;
-                        panel.appendChild(div);
-                    });
-                } catch (error) {
-                    console.error('Error parsing JSON:', error);
-                    panel.innerHTML = '<p class="text-red-500">Error loading file. Please ensure it\'s a valid JSON file.</p>';
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        // Set up file input handlers
-        document.getElementById('file1').addEventListener('change', (e) => {
-            if (e.target.files[0]) {
-                handleFileLoad(e.target.files[0], 'leftPanel', 'leftTitle', 'leftMetadata');
-            }
-        });
-
-        document.getElementById('file2').addEventListener('change', (e) => {
-            if (e.target.files[0]) {
-                handleFileLoad(e.target.files[0], 'rightPanel', 'rightTitle', 'rightMetadata');
-            }
-        });
+    });
     </script>
 </body>
 </html>
