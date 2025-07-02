@@ -14,7 +14,7 @@ import aiofiles
 import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import re
-from pdfprocessor import PdfProcessor
+from contentprocessor import PdfProcessor
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -382,8 +382,8 @@ class Paperpal:
         image_dir = output_path / "images"
         base_name = input_path.stem if pdf_id is None else pdf_id
 
-        content = self.pdf_processor.extract_content(str(input_path), str(image_dir), base_name)
-        chunks = self.pdf_processor.create_chunks(content, self.chunk_size, self.chunk_overlap)
+        content = self.pdf_processor.extract_content(str(input_path), output_image_dir=str(image_dir), pdf_id=base_name)
+        chunks = self.pdf_processor.create_chunks(content, chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap)
 
         if not chunks:
             logger.error("No text chunks could be created. Aborting.")

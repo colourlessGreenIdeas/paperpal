@@ -3,15 +3,95 @@ from pathlib import Path
 from typing import List, Dict
 import logging
 import tiktoken
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
-class PdfProcessor:
+class ContentProcessor(ABC):
+    """
+    An abstract base class for content processors.
+    """
+    @abstractmethod
+    def extract_content(self, source, **kwargs) -> List[Dict]:
+        """
+        Extracts content from a source.
+
+        :param source: The content source (e.g., file path, URL, text).
+        :param kwargs: Additional keyword arguments for the processor.
+        :return: A list of dictionaries, where each dict represents a content block (e.g., text or image).
+        """
+        pass
+
+    @abstractmethod
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List:
+        """
+        Creates chunks from the extracted content.
+
+        :param content_list: The list of content blocks from extract_content.
+        :param kwargs: Additional keyword arguments for chunking (e.g., chunk_size).
+        :return: A list of chunks. The structure of a chunk can vary.
+        """
+        pass
+
+class TextProcessor(ContentProcessor):
+    """
+    A class to process text content.
+    """
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
+        return [{"type": "text", "content": source}]
+
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[str]:
+        # For simple text, the content is the first item in the list
+        text = content_list[0]['content'] if content_list else ''
+        # Simple chunking for text can be implemented here if needed
+        # For now, returns the whole text as one chunk.
+        return [text]
+    
+
+class YoutubeProcessor(ContentProcessor):
+    """
+    A class to process YouTube content.
+    """
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
+        # Implementation to fetch transcript from youtube_url
+        pass
+
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[str]:
+        # Implementation to chunk the transcript
+        pass
+
+class WebProcessor(ContentProcessor):
+    """
+    A class to process web content.
+    """
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
+        # Implementation to fetch content from web_url
+        pass
+
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[str]:
+        # Implementation to chunk the web content
+        pass
+    
+
+class PdfProcessor(ContentProcessor):
     """
     A class to extract content from a PDF file.
     """
 
-    def extract_content(self, pdf_path: str, output_image_dir: str, pdf_id: str = None) -> List[Dict]:
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
+        """
+        Extracts content from a PDF file.
+
+        :param source: Path to the PDF file.
+        :param kwargs: Expects 'output_image_dir' and optional 'pdf_id'.
+        :return: List of content dictionaries.
+        """
+        pdf_path = source
+        output_image_dir = kwargs.get("output_image_dir")
+        if not output_image_dir:
+            raise ValueError("output_image_dir is required for PdfProcessor")
+        pdf_id = kwargs.get("pdf_id")
+
         logger.info(f"Extracting content from {pdf_path}...")
         if not Path(pdf_path).exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
@@ -64,7 +144,17 @@ class PdfProcessor:
         logger.info(f"Extracted {len(content_list)} content blocks ({img_counter} images).")
         return content_list
 
-    def create_chunks(self, content_list: List[Dict], chunk_size: int, chunk_overlap: int) -> List[Dict]:
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[Dict]:
+        """
+        Creates chunks from the extracted PDF content.
+
+        :param content_list: The list of content blocks.
+        :param kwargs: Expects 'chunk_size' and 'chunk_overlap'.
+        :return: List of chunk dictionaries.
+        """
+        chunk_size = kwargs.get("chunk_size", 1024)
+        chunk_overlap = kwargs.get("chunk_overlap", 100)
+
         logger.info("Creating text chunks...")
         # Build a flat list of (type, content/placeholder) for easier processing
         flat_blocks = []
