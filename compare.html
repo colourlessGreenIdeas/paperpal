@@ -208,7 +208,7 @@
         content = content.replace(/\r\n/g, '\n').trim();
         // Render images: Replace [IMAGE: ...] with <img ...>
         content = content.replace(/\[IMAGE:\s*(.*?)\s*\]/g, function(_, filename) {
-            return `<img src="output/images/${filename.trim()}" class="rounded shadow cursor-pointer hover:scale-105 transition" style="max-width:100%;margin:1em 0;" onclick=\"showModal('output/images/${filename.trim()}')\" />`;
+            return `<img src="/images/${filename.trim()}" class="rounded shadow cursor-pointer hover:scale-105 transition" style="max-width:100%;margin:1em 0;" onclick=\"showModal('/images/${filename.trim()}')\" />`;
         });
         // Math
         const mathExpressions = [];

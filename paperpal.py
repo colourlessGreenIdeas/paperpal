@@ -218,7 +218,7 @@ class AzureOpenAIModel(LanguageModel):
 
 # --- PDF Processor ---
 class PdfProcessor:
-    def extract_content(self, pdf_path: str, output_image_dir: str) -> List[Dict]:
+    def extract_content(self, pdf_path: str, output_image_dir: str, pdf_id: str = None) -> List[Dict]:
         logger.info(f"Extracting content from {pdf_path}...")
         if not Path(pdf_path).exists():
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
@@ -254,7 +254,8 @@ class PdfProcessor:
                         else:
                             logger.warning(f"No xref or image bytes found for image on page {page_num + 1}")
                             continue
-                        img_filename = f"image_{page_num + 1}_{img_counter}.{image_ext}"
+                        # Include pdf_id in the image filename if provided
+                        img_filename = f"{pdf_id}_image_{page_num + 1}_{img_counter}.{image_ext}" if pdf_id else f"image_{page_num + 1}_{img_counter}.{image_ext}"
                         img_path = Path(output_image_dir) / img_filename
                         img_path.write_bytes(image_bytes)
                         content_list.append({
@@ -474,14 +475,14 @@ class Paperpal:
              await f.write(json.dumps(content, ensure_ascii=False, indent=2))
          logger.info(f"Saved {grade_level} JSON to {output_path}")
 
-    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str]):
+    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], pdf_id: str = None):
         input_path = Path(input_pdf)
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         image_dir = output_path / "images"
-        base_name = input_path.stem
+        base_name = input_path.stem if pdf_id is None else pdf_id
 
-        content = self.pdf_processor.extract_content(str(input_path), str(image_dir))
+        content = self.pdf_processor.extract_content(str(input_path), str(image_dir), base_name)
         chunks = self.pdf_processor.create_chunks(content, self.chunk_size, self.chunk_overlap)
 
         if not chunks:
