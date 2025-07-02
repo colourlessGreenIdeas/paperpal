@@ -59,10 +59,10 @@ You can use either `venv` or `conda` to manage your Python environment. Choose o
 2. Create a new conda environment with Python 3.10:
 ```bash
 # Create new environment
-conda create -n paperagent python=3.10
+conda create -n paperpal python=3.10
 
 # Activate the environment
-conda activate paperagent
+conda activate paperpal
 
 # Verify Python version
 python --version  # Should show Python 3.10.x
