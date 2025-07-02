@@ -69,7 +69,8 @@ async def upload_pdf(file: UploadFile = File(...)):
             await paper_pal.process_paper(
                 input_pdf=pdf_path,
                 output_dir=OUTPUT_DIR,
-                grade_levels=GRADE_LEVELS
+                grade_levels=GRADE_LEVELS,
+                pdf_id=paper_id
             )
             
             # Create metadata
