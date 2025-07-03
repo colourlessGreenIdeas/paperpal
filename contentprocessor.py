@@ -12,6 +12,12 @@ from urllib.parse import urlparse, urljoin
 import hashlib
 import re
 import time
+import pdfkit
+import tempfile
+import aiohttp
+import concurrent.futures
+from functools import partial
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -263,17 +269,24 @@ class WebProcessor(ContentProcessor):
             image_urls = {urljoin(source, img_url) for img_url in image_urls 
                          if not img_url.lower().endswith('.svg')}
             
-            # Get text content
-            text_content = soup.get_text(separator='\n', strip=True)
-            
             # Create content blocks
             content_blocks = []
             
-            # Add text block
-            content_blocks.append({
-                'type': 'text',
-                'content': text_content
-            })
+            # Process text content block by block, similar to PDF
+            for block in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'div']):
+                # Skip if block contains no text or only whitespace
+                text = block.get_text(strip=True)
+                if not text:
+                    continue
+                    
+                # Skip if block is just a container for other blocks we'll process
+                if block.name == 'div' and len(block.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'])) > 0:
+                    continue
+                    
+                content_blocks.append({
+                    'type': 'text',
+                    'content': text
+                })
             
             # Process images
             successful_images = 0
@@ -505,3 +518,156 @@ class PdfProcessor(ContentProcessor):
             i = next_i
         logger.info(f"Created {len(chunks)} chunks.")
         return chunks
+
+class WebToPdfProcessor(ContentProcessor):
+    """
+    A class to process web content by first converting it to PDF using Playwright.
+    This provides consistent processing with PDF content.
+    """
+    def __init__(self):
+        super().__init__()
+        self.pdf_processor = PdfProcessor()
+        # Create a thread pool executor
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    def _is_valid_url(self, url: str) -> bool:
+        """Check if the URL is valid and has a supported scheme."""
+        try:
+            result = urlparse(url)
+            return all([result.scheme in ['http', 'https'], result.netloc])
+        except:
+            return False
+        
+    def _is_valid_pdf(self, url: str) -> bool:
+        """
+        Check if the URL points directly to a PDF file
+        
+        Args:
+            url: The URL to check
+        Returns:
+            bool: True if the URL points to a PDF, False otherwise
+        """
+        try:
+            # Send a HEAD request first to check content type
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.head(url, headers=headers, allow_redirects=True)
+            
+            # Check content type header
+            content_type = response.headers.get('Content-Type', '').lower()
+            if 'application/pdf' in content_type:
+                return True
+                
+            # Some servers might not set content type correctly
+            # Check if URL ends with .pdf
+            if url.lower().endswith('.pdf'):
+                # Verify by downloading first few bytes
+                response = requests.get(url, headers=headers, stream=True)
+                first_bytes = next(response.iter_content(256))
+                # Check for PDF magic number (%PDF-)
+                if first_bytes.startswith(b'%PDF-'):
+                    return True
+                    
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking if URL is PDF: {e}")
+            return False
+
+    def _download_pdf(self, url: str, output_path: str) -> None:
+        """
+        Download a PDF file from URL
+        
+        Args:
+            url: The URL of the PDF
+            output_path: Where to save the PDF
+        """
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        try:
+            with requests.get(url, headers=headers, stream=True) as response:
+                response.raise_for_status()
+                with open(output_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                        
+            logger.info(f"PDF downloaded to: {output_path}")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to download PDF: {e}")
+
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
+        """
+        Extract content from a URL by converting to PDF first.
+        
+        :param source: The URL to process
+        :param kwargs: Additional arguments (output_image_dir and content_id required)
+        :return: List of content blocks (text and images)
+        """
+        if not self._is_valid_url(source):
+            raise ValueError("Invalid URL provided")
+
+        output_image_dir = kwargs.get("output_image_dir")
+        content_id = kwargs.get("content_id")
+        
+        if not output_image_dir:
+            raise ValueError("output_image_dir is required for WebToPdfProcessor")
+        if not content_id:
+            raise ValueError("content_id is required for WebToPdfProcessor")
+
+        logger.info(f"Processing web content from {source}...")
+
+        # Save PDF in uploads directory
+        pdf_path = os.path.join("uploads", f"{content_id}.pdf")
+        
+        try:
+            # Check if URL is direct PDF
+            if self._is_valid_pdf(source):
+                logger.info("URL points to a PDF file, downloading directly...")
+                self._download_pdf(source, pdf_path)
+                title = os.path.basename(source)  # Use filename as title for PDFs
+            else:
+                # Convert webpage to PDF using Playwright
+                logger.info(f"Converting web page to PDF...")
+                title = webpage_to_pdf(source, pdf_path)
+            
+            if not os.path.exists(pdf_path):
+                raise RuntimeError("PDF conversion/download failed")
+            
+            # Use PdfProcessor to handle the converted PDF
+            logger.info("Processing converted PDF...")
+            content_list = self.pdf_processor.extract_content(
+                pdf_path,
+                output_image_dir=output_image_dir,
+                content_id=content_id
+            )
+
+            # Add the title as metadata if we got one
+            if content_list and title:
+                if content_list[0]['type'] == 'text':
+                    content_list[0]['metadata'] = {'title': title}
+                else:
+                    content_list.insert(0, {
+                        'type': 'text',
+                        'content': '',
+                        'metadata': {'title': title}
+                    })
+
+            return content_list
+
+        except Exception as e:
+            # Clean up PDF if conversion fails
+            if os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except:
+                    pass
+            logger.error(f"Error processing web content: {str(e)}")
+            raise RuntimeError(f"Failed to process web content: {str(e)}")
+
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[Dict]:
+        """Use PdfProcessor's chunking logic"""
+        return self.pdf_processor.create_chunks(content_list, **kwargs)

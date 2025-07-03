@@ -14,7 +14,7 @@ import aiofiles
 import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import re
-from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
+from contentprocessor import PdfProcessor, TextProcessor, WebProcessor, WebToPdfProcessor
 import uuid
 
 # --- Setup Logging ---
@@ -264,7 +264,7 @@ class Paperpal:
         # Initialize processors
         self.pdf_processor = PdfProcessor()
         self.text_processor = TextProcessor()
-        self.web_processor = WebProcessor()
+        self.web_processor = WebToPdfProcessor()
 
     def get_grade_level_description(self, grade_level: str) -> str:
         return GRADE_LEVEL_DESCRIPTIONS.get(grade_level, "an undergraduate student")

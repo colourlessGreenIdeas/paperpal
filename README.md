@@ -30,12 +30,18 @@ A Python-based tool that simplifies research papers while preserving key insight
 python3.10 
 wkhtmltopdf
 poppler-utils
+libnspr4
+libnss3
 ```
-Install wkhtmltopdf and poppler-utils like so:
+Install the required dependencies:
 
 ```bash
+# Install wkhtmltopdf and poppler-utils
 sudo apt-get install -y poppler-utils
 sudo apt-get install -y wkhtmltopdf
+
+# Install Playwright system dependencies
+sudo apt-get install -y libnspr4 libnss3
 ```
 
 #### Windows
@@ -92,7 +98,13 @@ python --version  # Should show Python 3.10.x
 After setting up and activating your environment (either venv or conda), install the required packages:
 
 ```bash
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install Playwright and its browsers
+pip install playwright
+playwright install chromium
+playwright install-deps  # Required for Linux/WSL
 ```
 
 The project uses several Python packages:
@@ -103,6 +115,7 @@ The project uses several Python packages:
 - `PyPDF2`: PDF text extraction (v3.0.1)
 - `tiktoken`: Token counting for API calls (v0.5.2)
 - `python-dotenv`: Environment variable management (v1.0.0)
+- `playwright`: Web content processing and PDF generation
 
 #### PDF and Markdown Processing
 - `pdfkit`: PDF generation (v1.0.0)

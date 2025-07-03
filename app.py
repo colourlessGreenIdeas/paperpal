@@ -11,7 +11,8 @@ from paperpal import Paperpal, AsyncRateLimiter, CacheManager, OpenAIModel, Gemi
 import asyncio
 from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
 from pydantic import BaseModel
-import logging
+import logging as logger
+from webtopdf import webpage_to_pdf
 
 load_dotenv()
 
@@ -203,35 +204,59 @@ async def upload_url(request: URLRequest):
     try:
         # Generate unique ID for the content
         content_id = str(uuid.uuid4())
+
+        # Save PDF in uploads directory
+        pdf_path = os.path.join(UPLOAD_DIR, f"{content_id}.pdf")
         
-        # Process URL content using paper_pal
-        await paper_pal.process_paper(
-            input_pdf=request.url,  # For web content, this is the URL
-            output_dir=OUTPUT_DIR,
-            grade_levels=GRADE_LEVELS,
-            content_id=content_id,
-            content_type='web'  # Specify this is web content
-        )
-        
-        # Create metadata
-        metadata = {
-            "content_id": content_id,
-            "content_type": "web",
-            "original_url": request.url,
-            "versions": {grade: f"{content_id}_{grade}.json" for grade in GRADE_LEVELS}
-        }
-        
-        metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
-        
-        return JSONResponse(content=metadata)
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        try:
+            # Convert URL to PDF
+            logger.info(f"Converting URL to PDF: {request.url}")
+            webpage_to_pdf(request.url, pdf_path)
+            
+            if not os.path.exists(pdf_path):
+                raise RuntimeError("PDF conversion failed")
+            
+            # Process paper for all grade levels
+            await paper_pal.process_paper(
+                input_pdf=pdf_path,
+                output_dir=OUTPUT_DIR,
+                grade_levels=GRADE_LEVELS,
+                content_id=content_id
+            )
+            
+            # Create metadata
+            metadata = {
+                "content_id": content_id,
+                "content_type": "web",
+                "original_url": request.url,
+                "versions": {grade: f"{content_id}_{grade}.json" for grade in GRADE_LEVELS}
+            }
+            
+            metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+            
+            return JSONResponse(content=metadata)
+            
+        except Exception as e:
+            # Clean up PDF if conversion or processing fails
+            if os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except:
+                    pass
+            logger.error(f"Error processing URL content: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Error processing URL content: {str(e)}"}
+            )
+            
     except Exception as e:
-        logging.error(f"Error processing URL: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to process URL content")
+        logger.error(f"Error handling URL upload: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error handling URL upload: {str(e)}"}
+        )
 
 # Serve static files last
 app.mount("/", StaticFiles(directory=".", html=True), name="static") 
