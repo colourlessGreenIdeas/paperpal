@@ -10,6 +10,8 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin
 import hashlib
+import re
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +182,8 @@ class WebProcessor(ContentProcessor):
             'image/gif': '.gif',
             'image/webp': '.webp'
         }
+        self.max_retries = 3
+        self.timeout = 30  # Increased timeout for large images
 
     def _is_valid_url(self, url: str) -> bool:
         """Check if the URL is valid and has a supported scheme."""
@@ -189,39 +193,27 @@ class WebProcessor(ContentProcessor):
         except:
             return False
 
-    def _download_image(self, img_url: str, base_url: str, save_dir: str, content_id: str, img_counter: int) -> Optional[Dict]:
-        """Download an image and return its metadata."""
-        try:
-            # Make URL absolute if it's relative
-            img_url = urljoin(base_url, img_url)
-            
-            # Download image
-            response = requests.get(img_url, timeout=10)
-            response.raise_for_status()
-            
-            # Check content type
-            content_type = response.headers.get('content-type', '').lower()
-            if content_type not in self.supported_image_types:
-                return None
-            
-            # Generate filename using common method
-            extension = self.supported_image_types[content_type]
-            img_filename = self._generate_image_filename(content_id, img_counter, extension.lstrip('.'), 'web')
-            img_path = os.path.join(save_dir, img_filename)
-            
-            # Save image
-            with open(img_path, 'wb') as f:
-                f.write(response.content)
-            
-            return {
-                'type': 'image',
-                'path': img_path,
-                'placeholder': f"\n\n[IMAGE: {img_filename}]\n\n"
-            }
-            
-        except Exception as e:
-            logging.warning(f"Failed to download image {img_url}: {str(e)}")
-            return None
+    def _download_with_retry(self, url: str) -> Optional[requests.Response]:
+        """Download with retry logic"""
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': url
+        }
+        
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.get(url, headers=headers, timeout=self.timeout)
+                response.raise_for_status()
+                return response
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    raise
+                wait_time = (attempt + 1) * 2  # Exponential backoff
+                logger.warning(f"Attempt {attempt + 1} failed for {url}: {str(e)}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+        return None
 
     def extract_content(self, source: str, **kwargs) -> List[Dict]:
         """Extract content from a URL."""
@@ -236,54 +228,90 @@ class WebProcessor(ContentProcessor):
         if not content_id:
             raise ValueError("content_id is required for WebProcessor")
 
+        logger.info(f"Extracting content from {source}...")
+
         try:
             # Fetch the webpage
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            response = requests.get(source, headers=headers, timeout=10)
-            response.raise_for_status()
+            response = self._download_with_retry(source)
             
+            # Parse HTML
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Remove unwanted elements
-            for element in soup.find_all(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript']):
-                element.decompose()
+            for tag in ['script', 'style', 'noscript', 'iframe', 'svg']:
+                for element in soup.find_all(tag):
+                    element.decompose()
 
-            # Try to find the main content container
-            main_content = None
-            possible_content_tags = ['article', 'main', '[role="main"]', '.content', '.post', '.article']
+            # Extract all image URLs
+            image_urls = set()
             
-            for tag in possible_content_tags:
-                main_content = soup.select_one(tag)
-                if main_content:
-                    break
-
-            # If no main content container found, use body
-            if not main_content:
-                main_content = soup.body
-
-            # Extract text and images while preserving structure
-            content_list = []
-            img_counter = 0
+            # Get src and srcset from img tags
+            for img in soup.find_all('img'):
+                if src := img.get('src'):
+                    image_urls.add(src)
+                if srcset := img.get('srcset'):
+                    urls = [u.strip().split()[0] for u in srcset.split(',')]
+                    image_urls.update(urls)
             
-            for element in main_content.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'img']):
-                if element.name == 'img':
-                    img_url = element.get('src')
-                    if img_url:
-                        img_counter += 1
-                        img_data = self._download_image(img_url, source, output_image_dir, content_id, img_counter)
-                        if img_data:
-                            content_list.append(img_data)
-                else:
-                    text = element.get_text(strip=True)
-                    if text:  # Only add non-empty blocks
-                        content_list.append({
-                            'type': 'text',
-                            'content': text + '\n\n' if element.name.startswith('h') else text
-                        })
+            # Get background images from style attributes
+            for elem in soup.find_all(lambda tag: tag.get('style')):
+                if style := elem.get('style'):
+                    if url := re.search(r'url\([\'"]?(.*?)[\'"]?\)', style):
+                        image_urls.add(url.group(1))
 
-            return content_list
+            # Make URLs absolute and filter out SVGs and tiny images
+            image_urls = {urljoin(source, img_url) for img_url in image_urls 
+                         if not img_url.lower().endswith('.svg')}
+            
+            # Get text content
+            text_content = soup.get_text(separator='\n', strip=True)
+            
+            # Create content blocks
+            content_blocks = []
+            
+            # Add text block
+            content_blocks.append({
+                'type': 'text',
+                'content': text_content
+            })
+            
+            # Process images
+            successful_images = 0
+            for idx, img_url in enumerate(image_urls, 1):
+                try:
+                    # Download image with retry
+                    img_response = self._download_with_retry(img_url)
+                    if not img_response:
+                        continue
+                    
+                    # Check content type
+                    content_type = img_response.headers.get('content-type', '').lower()
+                    if content_type not in self.supported_image_types:
+                        logger.warning(f"Unsupported image type {content_type} for {img_url}")
+                        continue
+                    
+                    # Generate filename and save image
+                    extension = self.supported_image_types[content_type]
+                    img_filename = self._generate_image_filename(content_id, idx, extension.lstrip('.'), 'web')
+                    img_path = os.path.join(output_image_dir, img_filename)
+                    
+                    with open(img_path, 'wb') as f:
+                        f.write(img_response.content)
+                    
+                    # Add image block
+                    content_blocks.append({
+                        'type': 'image',
+                        'path': img_path,
+                        'placeholder': f"\n\n[IMAGE: {img_filename}]\n\n"
+                    })
+                    successful_images += 1
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to process image {img_url}: {str(e)}")
+                    continue
+
+            logger.info(f"Extracted {len(content_blocks)} content blocks ({successful_images} of {len(image_urls)} images downloaded successfully)")
+            return content_blocks
             
         except requests.RequestException as e:
             raise RuntimeError(f"Failed to fetch URL: {str(e)}")
@@ -309,7 +337,7 @@ class WebProcessor(ContentProcessor):
         chunks = []
         i = 0
         while i < len(flat_blocks):
-            chunk_text = ''
+            chunk_text = '' 
             chunk_images = []
             token_count = 0
             j = i
