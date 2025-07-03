@@ -51,11 +51,11 @@ async def upload_pdf(file: UploadFile = File(...)):
                 content={"detail": "Only PDF files are allowed"}
             )
         
-        # Generate unique ID for the paper
-        paper_id = str(uuid.uuid4())
+        # Generate unique ID for the content
+        content_id = str(uuid.uuid4())
         
         # Save original PDF
-        pdf_path = os.path.join(UPLOAD_DIR, f"{paper_id}.pdf")
+        pdf_path = os.path.join(UPLOAD_DIR, f"{content_id}.pdf")
         
         # Read file content
         file_content = await file.read()
@@ -70,17 +70,18 @@ async def upload_pdf(file: UploadFile = File(...)):
                 input_pdf=pdf_path,
                 output_dir=OUTPUT_DIR,
                 grade_levels=GRADE_LEVELS,
-                pdf_id=paper_id
+                content_id=content_id
             )
             
             # Create metadata
             metadata = {
-                "paper_id": paper_id,
+                "content_id": content_id,
+                "content_type": "pdf",
                 "original_filename": file.filename,
-                "versions": {grade: f"{paper_id}_{grade}.json" for grade in GRADE_LEVELS}
+                "versions": {grade: f"{content_id}_{grade}.json" for grade in GRADE_LEVELS}
             }
             
-            metadata_path = os.path.join(OUTPUT_DIR, f"{paper_id}_metadata.json")
+            metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
             
@@ -117,8 +118,8 @@ async def list_papers() -> List[Dict]:
             content={"detail": f"Error listing papers: {str(e)}"}
         )
 
-@app.get("/api/paper/{paper_id}/{grade_level}")
-async def get_paper_version(paper_id: str, grade_level: str):
+@app.get("/api/paper/{content_id}/{grade_level}")
+async def get_paper_version(content_id: str, grade_level: str):
     try:
         if grade_level not in GRADE_LEVELS:
             return JSONResponse(
@@ -126,7 +127,7 @@ async def get_paper_version(paper_id: str, grade_level: str):
                 content={"detail": "Invalid grade level"}
             )
         
-        file_path = os.path.join(OUTPUT_DIR, f"{paper_id}_{grade_level}.json")
+        file_path = os.path.join(OUTPUT_DIR, f"{content_id}_{grade_level}.json")
         try:
             with open(file_path) as f:
                 content = json.load(f)

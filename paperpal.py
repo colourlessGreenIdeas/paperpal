@@ -375,15 +375,31 @@ class Paperpal:
              await f.write(json.dumps(content, ensure_ascii=False, indent=2))
          logger.info(f"Saved {grade_level} JSON to {output_path}")
 
-    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], pdf_id: str = None):
+    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], content_id: str = None):
+        """
+        Process a paper and generate simplified versions for different grade levels.
+
+        :param input_pdf: Path to the input PDF file
+        :param output_dir: Directory to save output files
+        :param grade_levels: List of grade levels to generate
+        :param content_id: Unique identifier for this content (optional)
+        """
         input_path = Path(input_pdf)
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         image_dir = output_path / "images"
-        base_name = input_path.stem if pdf_id is None else pdf_id
+        base_name = content_id if content_id else input_path.stem
 
-        content = self.pdf_processor.extract_content(str(input_path), output_image_dir=str(image_dir), pdf_id=base_name)
-        chunks = self.pdf_processor.create_chunks(content, chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap)
+        content = self.pdf_processor.extract_content(
+            str(input_path),
+            output_image_dir=str(image_dir),
+            content_id=base_name
+        )
+        chunks = self.pdf_processor.create_chunks(
+            content,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap
+        )
 
         if not chunks:
             logger.error("No text chunks could be created. Aborting.")

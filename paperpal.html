@@ -511,15 +511,15 @@
                 
                 const papersList = document.getElementById('papersList');
                 papersList.innerHTML = papers.map(paper => `
-                    <div class="paper-item" data-paper-id="${paper.paper_id}">
-                        <div class="paper-header" onclick="togglePaper('${paper.paper_id}')">
+                    <div class="paper-item" data-content-id="${paper.content_id}">
+                        <div class="paper-header" onclick="togglePaper('${paper.content_id}')">
                             <div class="paper-title">${paper.original_filename}</div>
                             <div class="paper-toggle">▼</div>
                         </div>
-                        <div class="paper-versions" id="versions-${paper.paper_id}">
+                        <div class="paper-versions" id="versions-${paper.content_id}">
                             ${Object.entries(paper.versions).map(([grade, _]) => `
                                 <button class="version-btn" 
-                                        onclick="loadPaperVersion('${paper.paper_id}', '${grade}')"
+                                        onclick="loadPaperVersion('${paper.content_id}', '${grade}')"
                                         data-grade="${grade}">
                                     ${formatGradeLevel(grade)}
                                 </button>
@@ -574,11 +574,11 @@
             }
         }
 
-        async function loadPaperVersion(paperId, grade) {
+        async function loadPaperVersion(contentId, grade) {
             try {
                 // Update active states
                 document.querySelectorAll('.version-btn').forEach(btn => btn.classList.remove('active'));
-                const activeBtn = document.querySelector(`[data-paper-id="${paperId}"] [data-grade="${grade}"]`);
+                const activeBtn = document.querySelector(`[data-content-id="${contentId}"] [data-grade="${grade}"]`);
                 if (activeBtn) {
                     activeBtn.classList.add('active');
                 }
@@ -588,7 +588,7 @@
                 contentDisplay.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading paper version...</p></div>';
 
                 // Load content
-                const response = await fetch(`${API_URL}/api/paper/${paperId}/${grade}`);
+                const response = await fetch(`${API_URL}/api/paper/${contentId}/${grade}`);
                 const data = await response.json();
                 
                 if (!response.ok) {
@@ -645,7 +645,7 @@
                     });
                 });
 
-                currentPaper = paperId;
+                currentPaper = contentId;
                 currentVersion = grade;
             } catch (error) {
                 console.error('Error loading paper version:', error);
@@ -750,7 +750,7 @@
                 // Load the first version of the uploaded paper
                 if (result.versions && Object.keys(result.versions).length > 0) {
                     const firstGrade = Object.keys(result.versions)[0];
-                    await loadPaperVersion(result.paper_id, firstGrade);
+                    await loadPaperVersion(result.content_id, firstGrade);
                 }
 
             } catch (error) {
@@ -761,8 +761,8 @@
             }
         }
 
-        function togglePaper(paperId) {
-            const versionsDiv = document.getElementById(`versions-${paperId}`);
+        function togglePaper(contentId) {
+            const versionsDiv = document.getElementById(`versions-${contentId}`);
             const toggle = versionsDiv.parentElement.querySelector('.paper-toggle');
             
             versionsDiv.classList.toggle('expanded');

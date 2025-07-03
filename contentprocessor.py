@@ -1,6 +1,6 @@
 import fitz
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 import logging
 import tiktoken
 from abc import ABC, abstractmethod
@@ -12,26 +12,51 @@ class ContentProcessor(ABC):
     An abstract base class for content processors.
     """
     @abstractmethod
-    def extract_content(self, source, **kwargs) -> List[Dict]:
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
         """
         Extracts content from a source.
 
         :param source: The content source (e.g., file path, URL, text).
         :param kwargs: Additional keyword arguments for the processor.
+                      Required kwargs:
+                      - output_image_dir: str - Directory to save extracted images
+                      - content_id: str - Unique identifier for this content
         :return: A list of dictionaries, where each dict represents a content block (e.g., text or image).
+                Each dict must have a 'type' key with value either 'text' or 'image'.
+                For 'text' type: {'type': 'text', 'content': str}
+                For 'image' type: {'type': 'image', 'path': str, 'placeholder': str}
         """
         pass
 
     @abstractmethod
-    def create_chunks(self, content_list: List[Dict], **kwargs) -> List:
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[Dict]:
         """
         Creates chunks from the extracted content.
 
         :param content_list: The list of content blocks from extract_content.
-        :param kwargs: Additional keyword arguments for chunking (e.g., chunk_size).
-        :return: A list of chunks. The structure of a chunk can vary.
+        :param kwargs: Additional keyword arguments for chunking.
+                      Optional kwargs:
+                      - chunk_size: int - Target size for each chunk (default: 1024)
+                      - chunk_overlap: int - Number of overlapping tokens (default: 100)
+        :return: A list of chunk dictionaries, each containing:
+                - text: str - The text content of the chunk
+                - images: List[str] - List of image placeholders in this chunk
         """
         pass
+
+    def _generate_image_filename(self, content_id: str, counter: int, ext: str, prefix: Optional[str] = None) -> str:
+        """
+        Generate a consistent image filename across all processors.
+
+        :param content_id: Unique identifier for the content
+        :param counter: Image counter/index
+        :param ext: Image file extension (without dot)
+        :param prefix: Optional prefix to identify source type (e.g., 'web', 'pdf')
+        :return: Generated filename
+        """
+        if prefix:
+            return f"{content_id}_{prefix}_image_{counter}.{ext}"
+        return f"{content_id}_image_{counter}.{ext}"
 
 class TextProcessor(ContentProcessor):
     """
@@ -83,14 +108,17 @@ class PdfProcessor(ContentProcessor):
         Extracts content from a PDF file.
 
         :param source: Path to the PDF file.
-        :param kwargs: Expects 'output_image_dir' and optional 'pdf_id'.
+        :param kwargs: Expects 'output_image_dir' and 'content_id'.
         :return: List of content dictionaries.
         """
         pdf_path = source
         output_image_dir = kwargs.get("output_image_dir")
+        content_id = kwargs.get("content_id")
+        
         if not output_image_dir:
             raise ValueError("output_image_dir is required for PdfProcessor")
-        pdf_id = kwargs.get("pdf_id")
+        if not content_id:
+            raise ValueError("content_id is required for PdfProcessor")
 
         logger.info(f"Extracting content from {pdf_path}...")
         if not Path(pdf_path).exists():
@@ -127,8 +155,9 @@ class PdfProcessor(ContentProcessor):
                         else:
                             logger.warning(f"No xref or image bytes found for image on page {page_num + 1}")
                             continue
-                        # Include pdf_id in the image filename if provided
-                        img_filename = f"{pdf_id}_image_{page_num + 1}_{img_counter}.{image_ext}" if pdf_id else f"image_{page_num + 1}_{img_counter}.{image_ext}"
+                        
+                        # Use the common image filename generator
+                        img_filename = self._generate_image_filename(content_id, img_counter, image_ext, "pdf")
                         img_path = Path(output_image_dir) / img_filename
                         img_path.write_bytes(image_bytes)
                         content_list.append({
