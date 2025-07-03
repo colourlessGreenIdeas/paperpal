@@ -60,18 +60,95 @@ class ContentProcessor(ABC):
 
 class TextProcessor(ContentProcessor):
     """
-    A class to process text content.
+    Processor for plain text content.
     """
     def extract_content(self, source: str, **kwargs) -> List[Dict]:
-        return [{"type": "text", "content": source}]
+        """
+        Extracts content from a text file.
 
-    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[str]:
-        # For simple text, the content is the first item in the list
-        text = content_list[0]['content'] if content_list else ''
-        # Simple chunking for text can be implemented here if needed
-        # For now, returns the whole text as one chunk.
-        return [text]
-    
+        :param source: Path to the text file
+        :param kwargs: Additional keyword arguments
+                      Required:
+                      - content_id: str - Unique identifier for this content
+        :return: List of dictionaries containing text content
+        """
+        if 'content_id' not in kwargs:
+            raise ValueError("content_id is required for text processing")
+
+        try:
+            with open(source, 'r', encoding='utf-8') as f:
+                text = f.read()
+
+            # Split into paragraphs and create content blocks
+            content_list = []
+            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+            
+            for para in paragraphs:
+                content_list.append({
+                    "type": "text",
+                    "content": para
+                })
+            
+            return content_list
+            
+        except Exception as e:
+            logging.error(f"Error processing text file: {e}")
+            raise
+
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[Dict]:
+        """
+        Creates chunks from the extracted text content.
+
+        :param content_list: The list of content blocks.
+        :param kwargs: Expects 'chunk_size' and 'chunk_overlap'.
+        :return: List of chunk dictionaries.
+        """
+        chunk_size = kwargs.get("chunk_size", 1024)
+        chunk_overlap = kwargs.get("chunk_overlap", 100)
+
+        logger.info("Creating text chunks...")
+        # Build a flat list of content blocks
+        flat_blocks = []
+        for item in content_list:
+            if item['type'] == 'text':
+                flat_blocks.append({'type': 'text', 'content': item['content']})
+
+        tokenizer = tiktoken.get_encoding("cl100k_base")
+        chunks = []
+        i = 0
+        while i < len(flat_blocks):
+            chunk_text = ''
+            token_count = 0
+            j = i
+            while j < len(flat_blocks) and token_count < chunk_size:
+                block = flat_blocks[j]
+                block_tokens = tokenizer.encode(block['content'])
+                if token_count + len(block_tokens) > chunk_size and token_count > 0:
+                    break  # Don't overflow chunk, unless it's the first block
+                chunk_text += block['content'] + '\n\n'
+                token_count += len(block_tokens)
+                j += 1
+            
+            # Overlap logic: back up by chunk_overlap tokens
+            next_i = j
+            if next_i < len(flat_blocks) and chunk_overlap > 0:
+                # Find how many tokens to back up
+                overlap_tokens = 0
+                k = j - 1
+                while k >= i and overlap_tokens < chunk_overlap:
+                    block = flat_blocks[k]
+                    overlap_tokens += len(tokenizer.encode(block['content']))
+                    k -= 1
+                next_i = max(i + 1, k + 1)
+            
+            chunks.append({
+                'text': chunk_text.strip(),
+                'images': []  # Text content has no images
+            })
+            i = next_i
+
+        logger.info(f"Created {len(chunks)} chunks.")
+        return chunks
 
 class YoutubeProcessor(ContentProcessor):
     """

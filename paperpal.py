@@ -14,7 +14,7 @@ import aiofiles
 import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import re
-from contentprocessor import PdfProcessor
+from contentprocessor import PdfProcessor, TextProcessor
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -260,6 +260,7 @@ class Paperpal:
         self.chunk_size = 1500
         self.chunk_overlap = 400
         self.pdf_processor = PdfProcessor()
+        self.text_processor = TextProcessor()
 
     def get_grade_level_description(self, grade_level: str) -> str:
         return GRADE_LEVEL_DESCRIPTIONS.get(grade_level, "an undergraduate student")
@@ -379,7 +380,7 @@ class Paperpal:
         """
         Process a paper and generate simplified versions for different grade levels.
 
-        :param input_pdf: Path to the input PDF file
+        :param input_pdf: Path to the input file (PDF or text)
         :param output_dir: Directory to save output files
         :param grade_levels: List of grade levels to generate
         :param content_id: Unique identifier for this content (optional)
@@ -390,12 +391,15 @@ class Paperpal:
         image_dir = output_path / "images"
         base_name = content_id if content_id else input_path.stem
 
-        content = self.pdf_processor.extract_content(
+        # Choose processor based on file extension
+        processor = self.text_processor if input_path.suffix.lower() == '.txt' else self.pdf_processor
+        
+        content = processor.extract_content(
             str(input_path),
             output_image_dir=str(image_dir),
             content_id=base_name
         )
-        chunks = self.pdf_processor.create_chunks(
+        chunks = processor.create_chunks(
             content,
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap

@@ -189,6 +189,69 @@
             align-items: center;
         }
 
+        .input-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            width: 100%;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+
+        .input-tab {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: none;
+            color: var(--text-light);
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border-radius: 0.5rem;
+        }
+
+        .input-tab:hover {
+            color: var(--primary);
+            background: #f8f9ff;
+        }
+
+        .input-tab.active {
+            color: var(--primary);
+            background: #f0f7ff;
+        }
+
+        .input-area {
+            width: 100%;
+            display: none;
+        }
+
+        .input-area.active {
+            display: block;
+        }
+
+        .text-input {
+            width: 100%;
+            min-height: 300px;
+            padding: 1rem;
+            border: 2px solid var(--border);
+            border-radius: 1rem;
+            background: var(--surface);
+            font-family: inherit;
+            font-size: 1rem;
+            line-height: 1.6;
+            resize: vertical;
+            transition: all 0.3s ease;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .text-input::placeholder {
+            color: var(--text-light);
+        }
+
         .upload-area {
             width: 100%;
             border: 2px dashed var(--primary);
@@ -473,19 +536,37 @@
         </div>
 
         <div class="upload-container">
-        <div class="upload-area" id="uploadArea">
-                <h3>Drop your PDF here</h3>
-                <p>or click to select a file</p>
-                <input type="file" id="fileInput" class="file-input" accept=".pdf" style="display: none;">
-        </div>
+            <div class="input-tabs">
+                <button class="input-tab active" data-input-type="pdf">PDF Upload</button>
+                <button class="input-tab" data-input-type="text">Text Input</button>
+            </div>
+
+            <div class="input-area active" id="pdfInput">
+                <div class="upload-area" id="uploadArea">
+                    <h3>Drop your PDF here</h3>
+                    <p>or click to select a file</p>
+                    <input type="file" id="fileInput" class="file-input" accept=".pdf" style="display: none;">
+                </div>
+            </div>
+
+            <div class="input-area" id="textInput">
+                <textarea 
+                    class="text-input"
+                    id="textArea"
+                    placeholder="Paste or type your text here..."
+                ></textarea>
+                <button class="simplify-btn" onclick="handleTextSubmit()" style="margin-top: 1rem;">
+                    Process Text
+                </button>
+            </div>
 
             <div id="uploadProgress" style="display: none;">
                 <div class="spinner"></div>
-                <p>Processing your paper... This may take a few minutes.</p>
-        </div>
+                <p>Processing your content... This may take a few minutes.</p>
+            </div>
 
             <div class="content-area" id="contentDisplay">
-                <!-- Paper content will be displayed here -->
+                <!-- Content will be displayed here -->
             </div>
         </div>
     </div>
@@ -500,6 +581,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             refreshPapersList();
             setupUploadHandlers();
+            setupInputTabs();
         });
 
         async function refreshPapersList() {
@@ -767,6 +849,76 @@
             
             versionsDiv.classList.toggle('expanded');
             toggle.classList.toggle('expanded');
+        }
+
+        function setupInputTabs() {
+            const tabs = document.querySelectorAll('.input-tab');
+            const areas = document.querySelectorAll('.input-area');
+            
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Update tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    // Update areas
+                    areas.forEach(area => area.classList.remove('active'));
+                    const inputType = tab.getAttribute('data-input-type');
+                    document.getElementById(`${inputType}Input`).classList.add('active');
+                });
+            });
+        }
+
+        async function handleTextSubmit() {
+            const textArea = document.getElementById('textArea');
+            const text = textArea.value.trim();
+            
+            if (!text) {
+                alert('Please enter some text to process');
+                return;
+            }
+
+            // Show upload progress
+            const textInput = document.getElementById('textInput');
+            const uploadProgress = document.getElementById('uploadProgress');
+            textInput.style.display = 'none';
+            uploadProgress.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_URL}/api/upload/text`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text })
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Upload failed');
+                }
+
+                console.log('Text processing successful:', result);
+
+                // Refresh the papers list and hide progress
+                await refreshPapersList();
+                textInput.style.display = 'block';
+                uploadProgress.style.display = 'none';
+                textArea.value = ''; // Clear the text area
+
+                // Load the first version
+                if (result.versions && Object.keys(result.versions).length > 0) {
+                    const firstGrade = Object.keys(result.versions)[0];
+                    await loadPaperVersion(result.content_id, firstGrade);
+                }
+
+            } catch (error) {
+                console.error('Text processing error:', error);
+                alert('Error processing text: ' + error.message);
+                textInput.style.display = 'block';
+                uploadProgress.style.display = 'none';
+            }
         }
     </script>
 </body>

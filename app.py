@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, HTTPException, File
+from fastapi import FastAPI, UploadFile, HTTPException, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -100,6 +100,55 @@ async def upload_pdf(file: UploadFile = File(...)):
         return JSONResponse(
             status_code=500,
             content={"detail": f"Error uploading file: {str(e)}"}
+        )
+
+@app.post("/api/upload/text")
+async def upload_text(text: str = Body(..., embed=True)):
+    try:
+        # Generate unique ID for the content
+        content_id = str(uuid.uuid4())
+        
+        # Save the text to a file
+        text_path = os.path.join(UPLOAD_DIR, f"{content_id}.txt")
+        with open(text_path, "w", encoding="utf-8") as f:
+            f.write(text)
+        
+        try:
+            # Process text for all grade levels
+            await paper_pal.process_paper(
+                input_pdf=text_path,  # We'll update this to handle text files
+                output_dir=OUTPUT_DIR,
+                grade_levels=GRADE_LEVELS,
+                content_id=content_id
+            )
+            
+            # Create metadata
+            metadata = {
+                "content_id": content_id,
+                "content_type": "text",
+                "original_filename": "text_input.txt",
+                "versions": {grade: f"{content_id}_{grade}.json" for grade in GRADE_LEVELS}
+            }
+            
+            metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+            
+            return JSONResponse(content=metadata)
+            
+        except Exception as e:
+            # Clean up uploaded file if processing fails
+            if os.path.exists(text_path):
+                os.remove(text_path)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": f"Error processing text: {str(e)}"}
+            )
+            
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error handling text: {str(e)}"}
         )
 
 @app.get("/api/papers")
