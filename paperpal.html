@@ -527,6 +527,33 @@
                 padding: 1rem;
             }
         }
+
+        .url-input-container {
+            display: flex;
+            gap: 1rem;
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .url-hint {
+            color: var(--text-light);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -556,6 +583,10 @@
                     <i class="fas fa-align-left"></i>
                     Text Input
                 </button>
+                <button class="input-tab" data-input-type="url">
+                    <i class="fas fa-globe"></i>
+                    Web URL
+                </button>
             </div>
 
             <div class="input-area active" id="pdfInput">
@@ -575,6 +606,16 @@
                 <button class="simplify-btn" onclick="handleTextSubmit()" style="margin-top: 1rem;">
                     Process Text
                 </button>
+            </div>
+
+            <div class="input-area" id="urlInput">
+                <div class="url-input-container">
+                    <input type="url" id="urlArea" class="url-input" placeholder="Enter website URL (e.g., https://example.com/article)">
+                    <button class="simplify-btn" onclick="handleUrlSubmit()" style="margin-top: 1rem;">
+                        Process URL
+                    </button>
+                </div>
+                <p class="url-hint">Enter the URL of an article or webpage to analyze its content.</p>
             </div>
 
             <div id="uploadProgress" style="display: none;">
@@ -874,14 +915,21 @@
             
             tabs.forEach(tab => {
                 tab.addEventListener('click', () => {
-                    // Update tabs
-                    tabs.forEach(t => t.classList.remove('active'));
+                    // Remove active class from all tabs and areas
+                    document.querySelectorAll('.input-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.input-area').forEach(area => {
+                        area.classList.remove('active');
+                        area.style.display = 'none';
+                    });
+                    
+                    // Add active class to clicked tab
                     tab.classList.add('active');
                     
-                    // Update areas
-                    areas.forEach(area => area.classList.remove('active'));
+                    // Show corresponding input area
                     const inputType = tab.getAttribute('data-input-type');
-                    document.getElementById(`${inputType}Input`).classList.add('active');
+                    const inputArea = document.getElementById(`${inputType}Input`);
+                    inputArea.classList.add('active');
+                    inputArea.style.display = 'block';
                 });
             });
         }
@@ -937,6 +985,63 @@
                 uploadProgress.style.display = 'none';
             }
         }
+
+        async function handleUrlSubmit() {
+            const urlArea = document.getElementById('urlArea');
+            const url = urlArea.value.trim();
+            
+            if (!url) {
+                alert('Please enter a valid URL');
+                return;
+            }
+
+            // Show upload progress
+            const urlInput = document.getElementById('urlInput');
+            const uploadProgress = document.getElementById('uploadProgress');
+            urlInput.style.display = 'none';
+            uploadProgress.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_URL}/api/upload/url`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Upload failed');
+                }
+
+                console.log('URL processing successful:', result);
+
+                // Refresh the papers list and hide progress
+                await refreshPapersList();
+                urlInput.style.display = 'block';
+                uploadProgress.style.display = 'none';
+                urlArea.value = ''; // Clear the input
+
+                // Load the first version
+                if (result.versions && Object.keys(result.versions).length > 0) {
+                    const firstGrade = Object.keys(result.versions)[0];
+                    await loadPaperVersion(result.content_id, firstGrade);
+                }
+
+            } catch (error) {
+                console.error('URL processing error:', error);
+                alert('Error processing URL: ' + error.message);
+                urlInput.style.display = 'block';
+                uploadProgress.style.display = 'none';
+            }
+        }
+
+        // Initialize with PDF upload section visible
+        document.getElementById('pdfInput').style.display = 'block';
+        document.getElementById('textInput').style.display = 'none';
+        document.getElementById('urlInput').style.display = 'none';
     </script>
 </body>
 </html>

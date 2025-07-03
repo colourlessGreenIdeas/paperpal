@@ -1,9 +1,15 @@
 import fitz
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Tuple
 import logging
 import tiktoken
 from abc import ABC, abstractmethod
+import os
+import uuid
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse, urljoin
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -166,14 +172,180 @@ class WebProcessor(ContentProcessor):
     """
     A class to process web content.
     """
-    def extract_content(self, source: str, **kwargs) -> List[Dict]:
-        # Implementation to fetch content from web_url
-        pass
+    def __init__(self):
+        super().__init__()
+        self.supported_image_types = {
+            'image/jpeg': '.jpg',
+            'image/png': '.png',
+            'image/gif': '.gif',
+            'image/webp': '.webp'
+        }
 
-    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[str]:
-        # Implementation to chunk the web content
-        pass
-    
+    def _is_valid_url(self, url: str) -> bool:
+        """Check if the URL is valid and has a supported scheme."""
+        try:
+            result = urlparse(url)
+            return all([result.scheme in ['http', 'https'], result.netloc])
+        except:
+            return False
+
+    def _download_image(self, img_url: str, base_url: str, save_dir: str, content_id: str, img_counter: int) -> Optional[Dict]:
+        """Download an image and return its metadata."""
+        try:
+            # Make URL absolute if it's relative
+            img_url = urljoin(base_url, img_url)
+            
+            # Download image
+            response = requests.get(img_url, timeout=10)
+            response.raise_for_status()
+            
+            # Check content type
+            content_type = response.headers.get('content-type', '').lower()
+            if content_type not in self.supported_image_types:
+                return None
+            
+            # Generate filename using common method
+            extension = self.supported_image_types[content_type]
+            img_filename = self._generate_image_filename(content_id, img_counter, extension.lstrip('.'), 'web')
+            img_path = os.path.join(save_dir, img_filename)
+            
+            # Save image
+            with open(img_path, 'wb') as f:
+                f.write(response.content)
+            
+            return {
+                'type': 'image',
+                'path': img_path,
+                'placeholder': f"\n\n[IMAGE: {img_filename}]\n\n"
+            }
+            
+        except Exception as e:
+            logging.warning(f"Failed to download image {img_url}: {str(e)}")
+            return None
+
+    def extract_content(self, source: str, **kwargs) -> List[Dict]:
+        """Extract content from a URL."""
+        if not self._is_valid_url(source):
+            raise ValueError("Invalid URL provided")
+
+        output_image_dir = kwargs.get("output_image_dir")
+        content_id = kwargs.get("content_id")
+        
+        if not output_image_dir:
+            raise ValueError("output_image_dir is required for WebProcessor")
+        if not content_id:
+            raise ValueError("content_id is required for WebProcessor")
+
+        try:
+            # Fetch the webpage
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(source, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove unwanted elements
+            for element in soup.find_all(['script', 'style', 'nav', 'header', 'footer', 'iframe', 'noscript']):
+                element.decompose()
+
+            # Try to find the main content container
+            main_content = None
+            possible_content_tags = ['article', 'main', '[role="main"]', '.content', '.post', '.article']
+            
+            for tag in possible_content_tags:
+                main_content = soup.select_one(tag)
+                if main_content:
+                    break
+
+            # If no main content container found, use body
+            if not main_content:
+                main_content = soup.body
+
+            # Extract text and images while preserving structure
+            content_list = []
+            img_counter = 0
+            
+            for element in main_content.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'img']):
+                if element.name == 'img':
+                    img_url = element.get('src')
+                    if img_url:
+                        img_counter += 1
+                        img_data = self._download_image(img_url, source, output_image_dir, content_id, img_counter)
+                        if img_data:
+                            content_list.append(img_data)
+                else:
+                    text = element.get_text(strip=True)
+                    if text:  # Only add non-empty blocks
+                        content_list.append({
+                            'type': 'text',
+                            'content': text + '\n\n' if element.name.startswith('h') else text
+                        })
+
+            return content_list
+            
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to fetch URL: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Error processing URL content: {str(e)}")
+
+    def create_chunks(self, content_list: List[Dict], **kwargs) -> List[Dict]:
+        """Creates chunks from the extracted web content."""
+        chunk_size = kwargs.get("chunk_size", 1024)
+        chunk_overlap = kwargs.get("chunk_overlap", 100)
+
+        logger.info("Creating text chunks...")
+        
+        # Build a flat list of content blocks
+        flat_blocks = []
+        for item in content_list:
+            if item['type'] == 'text':
+                flat_blocks.append({'type': 'text', 'content': item['content']})
+            elif item['type'] == 'image':
+                flat_blocks.append({'type': 'image', 'placeholder': item['placeholder']})
+
+        tokenizer = tiktoken.get_encoding("cl100k_base")
+        chunks = []
+        i = 0
+        while i < len(flat_blocks):
+            chunk_text = ''
+            chunk_images = []
+            token_count = 0
+            j = i
+            while j < len(flat_blocks) and token_count < chunk_size:
+                block = flat_blocks[j]
+                if block['type'] == 'text':
+                    block_tokens = tokenizer.encode(block['content'])
+                    if token_count + len(block_tokens) > chunk_size and token_count > 0:
+                        break  # Don't overflow chunk, unless it's the first block
+                    chunk_text += block['content'] + '\n\n'
+                    token_count += len(block_tokens)
+                elif block['type'] == 'image':
+                    chunk_images.append(block['placeholder'])
+                j += 1
+            
+            # Overlap logic: back up by chunk_overlap tokens
+            next_i = j
+            if next_i < len(flat_blocks) and chunk_overlap > 0:
+                # Find how many tokens to back up
+                overlap_tokens = 0
+                k = j - 1
+                while k >= i and overlap_tokens < chunk_overlap:
+                    block = flat_blocks[k]
+                    if block['type'] == 'text':
+                        overlap_tokens += len(tokenizer.encode(block['content']))
+                    k -= 1
+                next_i = max(i + 1, k + 1)
+            
+            chunks.append({
+                'text': chunk_text.strip(),
+                'images': chunk_images
+            })
+            i = next_i
+
+        logger.info(f"Created {len(chunks)} chunks.")
+        return chunks
 
 class PdfProcessor(ContentProcessor):
     """

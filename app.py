@@ -9,6 +9,9 @@ from typing import List, Dict
 import uuid
 from paperpal import Paperpal, AsyncRateLimiter, CacheManager, OpenAIModel, GeminiModel, AzureOpenAIModel, LanguageModel
 import asyncio
+from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
+from pydantic import BaseModel
+import logging
 
 load_dotenv()
 
@@ -40,6 +43,9 @@ GRADE_LEVELS = ["grade4", "grade8", "grade12", "undergraduate", "phd"]
 
 # Mount the output/images directory
 app.mount("/images", StaticFiles(directory=os.path.join(OUTPUT_DIR, "images")), name="images")
+
+class URLRequest(BaseModel):
+    url: str
 
 # API routes
 @app.post("/api/upload")
@@ -191,6 +197,41 @@ async def get_paper_version(content_id: str, grade_level: str):
             status_code=500,
             content={"detail": f"Error retrieving paper version: {str(e)}"}
         )
+
+@app.post("/api/upload/url")
+async def upload_url(request: URLRequest):
+    try:
+        # Generate unique ID for the content
+        content_id = str(uuid.uuid4())
+        
+        # Process URL content using paper_pal
+        await paper_pal.process_paper(
+            input_pdf=request.url,  # For web content, this is the URL
+            output_dir=OUTPUT_DIR,
+            grade_levels=GRADE_LEVELS,
+            content_id=content_id,
+            content_type='web'  # Specify this is web content
+        )
+        
+        # Create metadata
+        metadata = {
+            "content_id": content_id,
+            "content_type": "web",
+            "original_url": request.url,
+            "versions": {grade: f"{content_id}_{grade}.json" for grade in GRADE_LEVELS}
+        }
+        
+        metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        
+        return JSONResponse(content=metadata)
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error processing URL: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process URL content")
 
 # Serve static files last
 app.mount("/", StaticFiles(directory=".", html=True), name="static") 

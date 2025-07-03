@@ -14,7 +14,8 @@ import aiofiles
 import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import re
-from contentprocessor import PdfProcessor, TextProcessor
+from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
+import uuid
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -253,14 +254,17 @@ class CacheManager:
 
 # --- Paperpal Core Class ---
 class Paperpal:
-    def __init__(self, language_model: LanguageModel, cache_manager: CacheManager, temp: float = 0.3):
-        self.language_model = language_model
+    def __init__(self, model: LanguageModel, cache_manager: CacheManager, temp: float = 0.3):
+        self.model = model
         self.cache_manager = cache_manager
-        self.temperature = temp
-        self.chunk_size = 1500
-        self.chunk_overlap = 400
+        self.temp = temp
+        self.chunk_size = 1024
+        self.chunk_overlap = 100
+        
+        # Initialize processors
         self.pdf_processor = PdfProcessor()
         self.text_processor = TextProcessor()
+        self.web_processor = WebProcessor()
 
     def get_grade_level_description(self, grade_level: str) -> str:
         return GRADE_LEVEL_DESCRIPTIONS.get(grade_level, "an undergraduate student")
@@ -293,7 +297,7 @@ class Paperpal:
             return cached
 
         prompt = self.get_prompt(chunk, context, grade_level)
-        simplified = await self.language_model.get_completion(prompt, SYSTEM_PROMPT, self.temperature)
+        simplified = await self.model.get_completion(prompt, SYSTEM_PROMPT, self.temp)
 
         await self.cache_manager.set(chunk, context, grade_level, simplified)
         return simplified
@@ -311,7 +315,7 @@ class Paperpal:
                 if chunk['text'].strip():
                     context = ''  # You can add context logic if needed
                     prompt = self.get_prompt(chunk['text'], context, grade_level)
-                    llm_tasks.append(self.language_model.get_completion(prompt, SYSTEM_PROMPT, self.temperature))
+                    llm_tasks.append(self.model.get_completion(prompt, SYSTEM_PROMPT, self.temp))
                     llm_task_indices.append((idx, grade_level))
                 else:
                     llm_tasks.append(None)
@@ -376,28 +380,37 @@ class Paperpal:
              await f.write(json.dumps(content, ensure_ascii=False, indent=2))
          logger.info(f"Saved {grade_level} JSON to {output_path}")
 
-    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], content_id: str = None):
+    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], content_id: str = None, content_type: str = None):
         """
         Process a paper and generate simplified versions for different grade levels.
 
-        :param input_pdf: Path to the input file (PDF or text)
+        :param input_pdf: Path to the input file (PDF or text) or URL string
         :param output_dir: Directory to save output files
         :param grade_levels: List of grade levels to generate
         :param content_id: Unique identifier for this content (optional)
+        :param content_type: Type of content ('pdf', 'text', or 'web')
         """
-        input_path = Path(input_pdf)
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         image_dir = output_path / "images"
-        base_name = content_id if content_id else input_path.stem
+        image_dir.mkdir(exist_ok=True)
 
-        # Choose processor based on file extension
-        processor = self.text_processor if input_path.suffix.lower() == '.txt' else self.pdf_processor
+        if not content_id:
+            content_id = str(uuid.uuid4())
+
+        # Choose processor based on content type or file extension
+        if content_type == 'web':
+            processor = self.web_processor
+            source = input_pdf  # For web, this is the URL
+        else:
+            input_path = Path(input_pdf)
+            source = str(input_path)
+            processor = self.text_processor if input_path.suffix.lower() == '.txt' else self.pdf_processor
         
         content = processor.extract_content(
-            str(input_path),
+            source,
             output_image_dir=str(image_dir),
-            content_id=base_name
+            content_id=content_id
         )
         chunks = processor.create_chunks(
             content,
@@ -413,8 +426,8 @@ class Paperpal:
 
         save_tasks = []
         for grade_level, grade_chunks in simplified_content.items():
-            md_path = output_path / f"{base_name}_{grade_level}.md"
-            json_path = output_path / f"{base_name}_{grade_level}.json"
+            md_path = output_path / f"{content_id}_{grade_level}.md"
+            json_path = output_path / f"{content_id}_{grade_level}.json"
             save_tasks.append(self._save_markdown(grade_chunks, md_path, grade_level, str(image_dir)))
             save_tasks.append(self._save_json(grade_chunks, json_path, grade_level))
 
