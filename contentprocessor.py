@@ -93,17 +93,11 @@ class TextProcessor(ContentProcessor):
             with open(source, 'r', encoding='utf-8') as f:
                 text = f.read()
 
-            # Split into paragraphs and create content blocks
-            content_list = []
-            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
-            
-            for para in paragraphs:
-                content_list.append({
-                    "type": "text",
-                    "content": para
-                })
-            
-            return content_list
+            # Return the entire text as a single block
+            return [{
+                "type": "text",
+                "content": text.strip()
+            }]
             
         except Exception as e:
             logging.error(f"Error processing text file: {e}")
@@ -121,47 +115,43 @@ class TextProcessor(ContentProcessor):
         chunk_overlap = kwargs.get("chunk_overlap", 100)
 
         logger.info("Creating text chunks...")
-        # Build a flat list of content blocks
-        flat_blocks = []
-        for item in content_list:
-            if item['type'] == 'text':
-                flat_blocks.append({'type': 'text', 'content': item['content']})
+        
+        if not content_list or not content_list[0]["content"]:
+            return []
 
+        # Get the full text
+        full_text = content_list[0]["content"]
+        
+        # Initialize tokenizer
         tokenizer = tiktoken.get_encoding("cl100k_base")
+        
+        # Get all tokens
+        tokens = tokenizer.encode(full_text)
+        
         chunks = []
-        i = 0
-        while i < len(flat_blocks):
-            chunk_text = ''
-            token_count = 0
-            j = i
-            while j < len(flat_blocks) and token_count < chunk_size:
-                block = flat_blocks[j]
-                block_tokens = tokenizer.encode(block['content'])
-                if token_count + len(block_tokens) > chunk_size and token_count > 0:
-                    break  # Don't overflow chunk, unless it's the first block
-                chunk_text += block['content'] + '\n\n'
-                token_count += len(block_tokens)
-                j += 1
+        start_idx = 0
+        
+        while start_idx < len(tokens):
+            # Get chunk_size tokens
+            end_idx = min(start_idx + chunk_size, len(tokens))
+            chunk_tokens = tokens[start_idx:end_idx]
             
-            # Overlap logic: back up by chunk_overlap tokens
-            next_i = j
-            if next_i < len(flat_blocks) and chunk_overlap > 0:
-                # Find how many tokens to back up
-                overlap_tokens = 0
-                k = j - 1
-                while k >= i and overlap_tokens < chunk_overlap:
-                    block = flat_blocks[k]
-                    overlap_tokens += len(tokenizer.encode(block['content']))
-                    k -= 1
-                next_i = max(i + 1, k + 1)
+            # Decode chunk
+            chunk_text = tokenizer.decode(chunk_tokens)
             
             chunks.append({
                 'text': chunk_text.strip(),
                 'images': []  # Text content has no images
             })
-            i = next_i
+            
+            # Move to next chunk, accounting for overlap
+            start_idx = end_idx - chunk_overlap
+            
+            # If we're near the end and the remaining text is small, include it in the last chunk
+            if len(tokens) - start_idx < chunk_size / 2:
+                break
 
-        logger.info(f"Created {len(chunks)} chunks.")
+        logger.info(f"Created {len(chunks)} chunks from {len(tokens)} tokens.")
         return chunks
 
 class YoutubeProcessor(ContentProcessor):
