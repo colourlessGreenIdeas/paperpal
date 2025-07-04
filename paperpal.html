@@ -83,15 +83,99 @@
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-        }
-
-        .paper-header span {
-            flex: 1;
+            justify-content: space-between;
+            transition: background-color 0.2s ease;
         }
 
         .paper-header:hover {
             background: #f1f5f9;
+        }
+
+        .paper-header span {
+            flex: 1;
+            font-size: 0.95rem;
+            color: var(--text);
+            margin-right: 1rem;
+        }
+
+        .paper-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            padding: 0.4rem;
+            border: none;
+            background: transparent;
+            color: var(--text-light);
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-btn:hover {
+            opacity: 1;
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .icon-btn.delete:hover {
+            color: #dc2626;
+            background: #fee2e2;
+        }
+
+        .toggle-icon {
+            color: var(--text-light);
+            font-size: 0.8rem;
+            transition: transform 0.3s ease;
+            margin-left: 0.25rem;
+        }
+
+        .toggle-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        .paper-versions {
+            display: none;
+            background: #ffffff;
+            border-bottom: 1px solid var(--border);
+            padding: 0.5rem;
+        }
+
+        .paper-versions.expanded {
+            display: block;
+        }
+
+        .version-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            border: none;
+            background: none;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 0.25rem;
+            font-size: 0.9rem;
+            margin: 0.25rem 0;
+        }
+
+        .version-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-icon.expanded {
+            transform: rotate(180deg);
         }
 
         .paper-title {
@@ -120,50 +204,6 @@
 
         .paper-toggle.expanded {
             transform: rotate(0deg);
-        }
-
-        .paper-versions {
-            padding: 0.5rem;
-            display: none;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            background: var(--background);
-        }
-
-        .paper-versions button {
-            padding: 0.25rem 0.75rem;
-            border: 1px solid var(--border);
-            border-radius: 0.25rem;
-            background: var(--surface);
-            cursor: pointer;
-        }
-
-        .paper-versions button:hover {
-            background: var(--primary);
-            color: white;
-        }
-
-        .version-btn {
-            display: block;
-            width: 100%;
-            padding: 0.5rem;
-            margin: 0.25rem 0;
-            text-align: left;
-            border: none;
-            background: none;
-            color: var(--text);
-            cursor: pointer;
-            border-radius: 0.25rem;
-            transition: all 0.2s ease;
-        }
-
-        .version-btn:hover {
-            background: #f1f5f9;
-        }
-
-        .version-btn.active {
-            background: var(--primary);
-            color: white;
         }
 
         .main-content {
@@ -656,6 +696,18 @@
             setupInputTabs();
         });
 
+        function toggleVersions(contentId, event) {
+            if (event && event.target.closest('.icon-btn')) {
+                return;
+            }
+            const versionsDiv = document.getElementById(`versions-${contentId}`);
+            const paperItem = event.target.closest('.paper-item');
+            const toggleIcon = paperItem.querySelector('.toggle-icon');
+            
+            versionsDiv.classList.toggle('expanded');
+            toggleIcon.classList.toggle('expanded');
+        }
+
         async function refreshPapersList() {
             try {
                 const response = await fetch(`${API_URL}/api/papers`);
@@ -666,14 +718,21 @@
                 const papersList = document.getElementById('papersList');
                 papersList.innerHTML = papers.map(paper => `
                     <div class="paper-item">
-                        <div class="paper-header" onclick="toggleVersions('${paper.content_id}')">
+                        <div class="paper-header" onclick="toggleVersions('${paper.content_id}', event)">
                             <span id="title-${paper.content_id}">${paper.original_filename || paper.original_url}</span>
-                            <button onclick="renamePaper('${paper.content_id}', event)">Rename</button>
-                            <button onclick="deletePaper('${paper.content_id}', event)">Delete</button>
+                            <div class="paper-actions">
+                                <button class="icon-btn" onclick="renamePaper('${paper.content_id}', event)" title="Rename">
+                                    <i class="fas fa-pencil"></i>
+                                </button>
+                                <button class="icon-btn delete" onclick="deletePaper('${paper.content_id}', event)" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <i class="fas fa-chevron-down toggle-icon"></i>
+                            </div>
                         </div>
-                        <div class="paper-versions" id="versions-${paper.content_id}" style="display: none;">
-                            ${Object.entries(paper.versions).map(([grade, _]) => `
-                                <button onclick="loadPaperVersion('${paper.content_id}', '${grade}')">${formatGradeLevel(grade)}</button>
+                        <div class="paper-versions" id="versions-${paper.content_id}">
+                            ${Object.entries(paper.versions || {}).map(([grade, _]) => `
+                                <button class="version-btn" onclick="loadPaperVersion('${paper.content_id}', '${grade}')">${formatGradeLevel(grade)}</button>
                             `).join('')}
                         </div>
                     </div>
@@ -1104,16 +1163,6 @@
                 console.error('Error deleting paper:', error);
                 alert('Failed to delete paper. Please try again.');
             }
-        }
-
-        // Add toggle function for versions
-        function toggleVersions(contentId, event) {
-            // Don't toggle if clicking buttons
-            if (event && event.target.tagName === 'BUTTON') {
-                return;
-            }
-            const versionsDiv = document.getElementById(`versions-${contentId}`);
-            versionsDiv.style.display = versionsDiv.style.display === 'none' ? 'block' : 'none';
         }
     </script>
 </body>
