@@ -810,6 +810,13 @@
 
         function renderKaTeX(tex, displayMode) {
             try {
+                if (!tex) {
+                    console.error('Attempted to render undefined or empty tex expression');
+                    return displayMode ? 
+                        `<div class="equation text-red-500">Error: Empty math expression</div>` : 
+                        `<span class="math-inline text-red-500">Error: Empty math expression</span>`;
+                }
+
                 tex = tex.trim();
                 tex = tex.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
                 if (tex.startsWith('\\begin{align') || tex.startsWith('\\begin{equation') || 
@@ -830,7 +837,7 @@
                     `<div class="equation">${rendered}</div>` : 
                     `<span class="math-inline">${rendered}</span>`;
             } catch (error) {
-                console.error('KaTeX error:', error);
+                console.error('KaTeX error:', error, 'Expression:', tex);
                 return displayMode ? 
                     `<div class="equation text-red-500">Error rendering: ${tex}</div>` : 
                     `<span class="math-inline text-red-500">Error rendering: ${tex}</span>`;
@@ -890,6 +897,10 @@
                 // Replace math placeholders with rendered equations
                 htmlContent = htmlContent.replace(new RegExp(mathPlaceholder + "(\\d+)", "g"), (match, index) => {
                     const expr = mathExpressions[parseInt(index)];
+                    if (!expr) {
+                        console.error(`Math expression not found for index ${index}`);
+                        return `[Error: Invalid math expression]`;
+                    }
                     return renderKaTeX(expr.tex, expr.display);
                 });
 
