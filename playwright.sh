@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Install Playwright
 pip install playwright
 

@@ -13,6 +13,7 @@ from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
 from pydantic import BaseModel
 import logging as logger
 from webtopdf import webpage_to_pdf
+from youtube_transcript import extract_youtube_transcript
 
 load_dotenv()
 
@@ -50,6 +51,12 @@ class URLRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     new_name: str
+
+class TextUpload(BaseModel):
+    text: str
+
+class YouTubeRequest(BaseModel):
+    url: str
 
 # API routes
 @app.post("/api/upload")
@@ -334,6 +341,22 @@ async def delete_paper(content_id: str):
             status_code=500,
             content={"detail": f"Error deleting paper: {str(e)}"}
         )
+
+@app.post("/api/youtube")
+async def process_youtube(request: YouTubeRequest):
+    """Process YouTube video transcript"""
+    try:
+        # Extract transcript
+        transcript = extract_youtube_transcript(request.url)
+        if transcript.startswith("Error") or transcript == "Invalid YouTube URL":
+            raise HTTPException(status_code=400, detail=transcript)
+            
+        # Reuse the upload_text endpoint by creating a TextUpload request
+        text_request = TextUpload(text=transcript)
+        return await upload_text(transcript)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Serve static files last
 app.mount("/", StaticFiles(directory=".", html=True), name="static") 
