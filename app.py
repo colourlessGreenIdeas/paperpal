@@ -9,7 +9,7 @@ from typing import List, Dict
 import uuid
 from paperpal import Paperpal, AsyncRateLimiter, CacheManager, OpenAIModel, GeminiModel, AzureOpenAIModel, LanguageModel
 import asyncio
-from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
+# from contentprocessor import PdfProcessor, TextProcessor, WebProcessor
 from pydantic import BaseModel
 import logging as logger
 from webtopdf import webpage_to_pdf
@@ -221,7 +221,7 @@ async def upload_url(request: URLRequest):
         try:
             # Convert URL to PDF
             logger.info(f"Converting URL to PDF: {request.url}")
-            webpage_to_pdf(request.url, pdf_path)
+            webpage_to_pdf(request.url, pdf_path) #This saves the pdf in the uploads directory
             
             if not os.path.exists(pdf_path):
                 raise RuntimeError("PDF conversion failed")
@@ -350,9 +350,7 @@ async def process_youtube(request: YouTubeRequest):
         transcript = extract_youtube_transcript(request.url)
         if transcript.startswith("Error") or transcript == "Invalid YouTube URL":
             raise HTTPException(status_code=400, detail=transcript)
-            
-        # Reuse the upload_text endpoint by creating a TextUpload request
-        text_request = TextUpload(text=transcript)
+
         return await upload_text(transcript)
         
     except Exception as e:

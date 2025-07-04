@@ -14,7 +14,7 @@ import aiofiles
 import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import re
-from contentprocessor import PdfProcessor, TextProcessor, WebProcessor, WebToPdfProcessor
+from contentprocessor import PdfProcessor, TextProcessor
 import uuid
 
 # --- Setup Logging ---
@@ -264,7 +264,7 @@ class Paperpal:
         # Initialize processors
         self.pdf_processor = PdfProcessor()
         self.text_processor = TextProcessor()
-        self.web_processor = WebToPdfProcessor()
+        # self.web_processor = WebToPdfProcessor()
 
     def get_grade_level_description(self, grade_level: str) -> str:
         return GRADE_LEVEL_DESCRIPTIONS.get(grade_level, "an undergraduate student")
@@ -400,8 +400,9 @@ class Paperpal:
 
         # Choose processor based on content type or file extension
         if content_type == 'web':
-            processor = self.web_processor
-            source = input_pdf  # For web, this is the URL
+            # processor = self.web_processor
+            # source = input_pdf  # For web, this is the URL
+            raise ValueError("Web processing not implemented yet")
         else:
             input_path = Path(input_pdf)
             source = str(input_path)
