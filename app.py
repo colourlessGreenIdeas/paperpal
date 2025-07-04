@@ -48,6 +48,9 @@ app.mount("/images", StaticFiles(directory=os.path.join(OUTPUT_DIR, "images")), 
 class URLRequest(BaseModel):
     url: str
 
+class RenameRequest(BaseModel):
+    new_name: str
+
 # API routes
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -256,6 +259,80 @@ async def upload_url(request: URLRequest):
         return JSONResponse(
             status_code=500,
             content={"detail": f"Error handling URL upload: {str(e)}"}
+        )
+
+@app.post("/api/paper/{content_id}/rename")
+async def rename_paper(content_id: str, request: RenameRequest):
+    try:
+        metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
+        if not os.path.exists(metadata_path):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": "Paper not found"}
+            )
+
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        metadata["original_filename"] = request.new_name
+
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        return JSONResponse(content={"message": "Paper renamed successfully"})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error renaming paper: {str(e)}"}
+        )
+
+@app.delete("/api/paper/{content_id}")
+async def delete_paper(content_id: str):
+    try:
+        metadata_path = os.path.join(OUTPUT_DIR, f"{content_id}_metadata.json")
+        if not os.path.exists(metadata_path):
+            return JSONResponse(
+                status_code=404,
+                content={"detail": "Paper not found"}
+            )
+
+        # Read metadata to get all associated files
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+
+        # Delete all version files
+        for version_file in metadata.get("versions", {}).values():
+            version_path = os.path.join(OUTPUT_DIR, version_file)
+            if os.path.exists(version_path):
+                os.remove(version_path)
+
+            # Delete markdown file as well
+            markdown_path = os.path.join(OUTPUT_DIR, version_file.replace(".json", ".md"))
+            if os.path.exists(markdown_path):
+                os.remove(markdown_path)
+
+        # Delete original files
+        original_files = [
+            os.path.join(UPLOAD_DIR, f"{content_id}.pdf"),
+            os.path.join(UPLOAD_DIR, f"{content_id}.txt"),
+            metadata_path
+        ]
+
+        for file_path in original_files:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+        # Delete any associated images
+        image_dir = os.path.join(OUTPUT_DIR, "images")
+        for file in os.listdir(image_dir):
+            if file.startswith(content_id):
+                os.remove(os.path.join(image_dir, file))
+
+        return JSONResponse(content={"message": "Paper deleted successfully"})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error deleting paper: {str(e)}"}
         )
 
 # Serve static files last
