@@ -5,6 +5,7 @@
 *.pdf
 *.json
 *.md
+uploads/
 output/
 geminioutput/
 node_modules/

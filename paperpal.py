@@ -14,6 +14,8 @@ import aiofiles
 import hashlib
 from tqdm.asyncio import tqdm_asyncio
 import re
+from contentprocessor import PdfProcessor, TextProcessor
+import uuid
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -216,107 +218,6 @@ class AzureOpenAIModel(LanguageModel):
 #         return await asyncio.to_thread(self._run_inference, prompt, system_message, temperature)
 
 
-# --- PDF Processor ---
-class PdfProcessor:
-    def extract_content(self, pdf_path: str, output_image_dir: str, pdf_id: str = None) -> List[Dict]:
-        logger.info(f"Extracting content from {pdf_path}...")
-        if not Path(pdf_path).exists():
-            raise FileNotFoundError(f"PDF file not found: {pdf_path}")
-
-        doc = fitz.open(pdf_path)
-        content_list = []
-        Path(output_image_dir).mkdir(parents=True, exist_ok=True)
-        img_counter = 0
-
-        for page_num, page in enumerate(doc):
-            blocks = page.get_text("dict", sort=True)["blocks"]
-            for block in blocks:
-                if block["type"] == 0:  # Text
-                    text = "\n".join(
-                        "".join(span["text"] for span in line["spans"]) for line in block["lines"]
-                    )
-                    if text.strip():
-                        content_list.append({"type": "text", "content": text.strip()})
-                elif block["type"] == 1:  # Image
-                    try:
-                        img_counter += 1
-                        # Prefer xref if available
-                        xref = block.get("image", {}).get("xref") if isinstance(block.get("image"), dict) else None
-                        if not xref:
-                            xref = block.get("xref")
-                        if xref:
-                            base_image = doc.extract_image(xref)
-                            image_bytes = base_image["image"]
-                            image_ext = base_image["ext"]
-                        elif isinstance(block.get("image"), bytes):
-                            image_bytes = block["image"]
-                            image_ext = "png"  # Default/fallback
-                        else:
-                            logger.warning(f"No xref or image bytes found for image on page {page_num + 1}")
-                            continue
-                        # Include pdf_id in the image filename if provided
-                        img_filename = f"{pdf_id}_image_{page_num + 1}_{img_counter}.{image_ext}" if pdf_id else f"image_{page_num + 1}_{img_counter}.{image_ext}"
-                        img_path = Path(output_image_dir) / img_filename
-                        img_path.write_bytes(image_bytes)
-                        content_list.append({
-                            "type": "image",
-                            "path": str(img_path),
-                            "placeholder": f"\n\n[IMAGE: {img_filename}]\n\n"
-                        })
-                    except Exception as e:
-                        logger.warning(f"Could not extract image on page {page_num + 1}: {e}")
-                else:
-                    logger.debug(f"Skipping block type {block['type']} on page {page_num + 1}")
-        doc.close()
-        logger.info(f"Extracted {len(content_list)} content blocks ({img_counter} images).")
-        return content_list
-
-    def create_chunks(self, content_list: List[Dict], chunk_size: int, chunk_overlap: int) -> List[Dict]:
-        logger.info("Creating text chunks...")
-        # Build a flat list of (type, content/placeholder) for easier processing
-        flat_blocks = []
-        for item in content_list:
-            if item['type'] == 'text':
-                flat_blocks.append({'type': 'text', 'content': item['content']})
-            elif item['type'] == 'image':
-                flat_blocks.append({'type': 'image', 'placeholder': item['placeholder']})
-
-        tokenizer = tiktoken.get_encoding("cl100k_base")
-        chunks = []
-        i = 0
-        while i < len(flat_blocks):
-            chunk_text = ''
-            chunk_images = []
-            token_count = 0
-            j = i
-            while j < len(flat_blocks) and token_count < chunk_size:
-                block = flat_blocks[j]
-                if block['type'] == 'text':
-                    block_tokens = tokenizer.encode(block['content'])
-                    if token_count + len(block_tokens) > chunk_size and token_count > 0:
-                        break  # Don't overflow chunk, unless it's the first block
-                    chunk_text += block['content']
-                    token_count += len(block_tokens)
-                elif block['type'] == 'image':
-                    chunk_images.append(block['placeholder'])
-                j += 1
-            # Overlap logic: back up by chunk_overlap tokens, but not into the middle of an image
-            next_i = j
-            if next_i < len(flat_blocks) and chunk_overlap > 0:
-                # Find how many tokens to back up
-                overlap_tokens = 0
-                k = j - 1
-                while k >= i and overlap_tokens < chunk_overlap:
-                    block = flat_blocks[k]
-                    if block['type'] == 'text':
-                        overlap_tokens += len(tokenizer.encode(block['content']))
-                    k -= 1
-                next_i = max(i + 1, k + 1)
-            chunks.append({'text': chunk_text, 'images': chunk_images})
-            i = next_i
-        logger.info(f"Created {len(chunks)} chunks.")
-        return chunks
-
 # --- Cache Manager ---
 class CacheManager:
     def __init__(self, cache_dir: str = ".cache"):
@@ -353,13 +254,17 @@ class CacheManager:
 
 # --- Paperpal Core Class ---
 class Paperpal:
-    def __init__(self, language_model: LanguageModel, cache_manager: CacheManager, temp: float = 0.3):
-        self.language_model = language_model
+    def __init__(self, model: LanguageModel, cache_manager: CacheManager, temp: float = 0.3):
+        self.model = model
         self.cache_manager = cache_manager
-        self.temperature = temp
-        self.chunk_size = 1500
-        self.chunk_overlap = 400
+        self.temp = temp
+        self.chunk_size = 1024
+        self.chunk_overlap = 100
+        
+        # Initialize processors
         self.pdf_processor = PdfProcessor()
+        self.text_processor = TextProcessor()
+        # self.web_processor = WebToPdfProcessor()
 
     def get_grade_level_description(self, grade_level: str) -> str:
         return GRADE_LEVEL_DESCRIPTIONS.get(grade_level, "an undergraduate student")
@@ -392,7 +297,7 @@ class Paperpal:
             return cached
 
         prompt = self.get_prompt(chunk, context, grade_level)
-        simplified = await self.language_model.get_completion(prompt, SYSTEM_PROMPT, self.temperature)
+        simplified = await self.model.get_completion(prompt, SYSTEM_PROMPT, self.temp)
 
         await self.cache_manager.set(chunk, context, grade_level, simplified)
         return simplified
@@ -410,7 +315,7 @@ class Paperpal:
                 if chunk['text'].strip():
                     context = ''  # You can add context logic if needed
                     prompt = self.get_prompt(chunk['text'], context, grade_level)
-                    llm_tasks.append(self.language_model.get_completion(prompt, SYSTEM_PROMPT, self.temperature))
+                    llm_tasks.append(self.model.get_completion(prompt, SYSTEM_PROMPT, self.temp))
                     llm_task_indices.append((idx, grade_level))
                 else:
                     llm_tasks.append(None)
@@ -475,15 +380,44 @@ class Paperpal:
              await f.write(json.dumps(content, ensure_ascii=False, indent=2))
          logger.info(f"Saved {grade_level} JSON to {output_path}")
 
-    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], pdf_id: str = None):
-        input_path = Path(input_pdf)
+    async def process_paper(self, input_pdf: str, output_dir: str, grade_levels: List[str], content_id: str = None, content_type: str = None):
+        """
+        Process a paper and generate simplified versions for different grade levels.
+
+        :param input_pdf: Path to the input file (PDF or text) or URL string
+        :param output_dir: Directory to save output files
+        :param grade_levels: List of grade levels to generate
+        :param content_id: Unique identifier for this content (optional)
+        :param content_type: Type of content ('pdf', 'text', or 'web')
+        """
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True)
         image_dir = output_path / "images"
-        base_name = input_path.stem if pdf_id is None else pdf_id
+        image_dir.mkdir(exist_ok=True)
 
-        content = self.pdf_processor.extract_content(str(input_path), str(image_dir), base_name)
-        chunks = self.pdf_processor.create_chunks(content, self.chunk_size, self.chunk_overlap)
+        if not content_id:
+            content_id = str(uuid.uuid4())
+
+        # Choose processor based on content type or file extension
+        if content_type == 'web':
+            # processor = self.web_processor
+            # source = input_pdf  # For web, this is the URL
+            raise ValueError("Web processing not implemented yet")
+        else:
+            input_path = Path(input_pdf)
+            source = str(input_path)
+            processor = self.text_processor if input_path.suffix.lower() == '.txt' else self.pdf_processor
+        
+        content = processor.extract_content(
+            source,
+            output_image_dir=str(image_dir),
+            content_id=content_id
+        )
+        chunks = processor.create_chunks(
+            content,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap
+        )
 
         if not chunks:
             logger.error("No text chunks could be created. Aborting.")
@@ -493,8 +427,8 @@ class Paperpal:
 
         save_tasks = []
         for grade_level, grade_chunks in simplified_content.items():
-            md_path = output_path / f"{base_name}_{grade_level}.md"
-            json_path = output_path / f"{base_name}_{grade_level}.json"
+            md_path = output_path / f"{content_id}_{grade_level}.md"
+            json_path = output_path / f"{content_id}_{grade_level}.json"
             save_tasks.append(self._save_markdown(grade_chunks, md_path, grade_level, str(image_dir)))
             save_tasks.append(self._save_json(grade_chunks, json_path, grade_level))
 
